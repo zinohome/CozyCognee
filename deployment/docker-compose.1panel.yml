@@ -1,0 +1,237 @@
+# 1Panel Docker Compose 编排文件
+# 适用于1Panel面板的Docker Compose配置
+# 注意：1Panel通常需要特定的网络和卷配置
+
+services:
+  cognee:
+    container_name: cognee
+    image: cognee:latest
+    restart: unless-stopped
+    networks:
+      - cognee-network
+    build:
+      context: .
+      dockerfile: docker/cognee/Dockerfile
+    volumes:
+      - ../project/cognee/cognee:/app/cognee
+      - ../project/cognee/distributed:/app/distributed
+      - .env:/app/.env
+      # 1Panel数据持久化目录
+      - ./data/cognee:/app/data
+    environment:
+      - DEBUG=false
+      - HOST=0.0.0.0
+      - ENVIRONMENT=production
+      - LOG_LEVEL=ERROR
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8000:8000"
+      - "5678:5678"
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 8GB
+        reservations:
+          cpus: "2.0"
+          memory: 4GB
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  cognee-mcp:
+    container_name: cognee-mcp
+    image: cognee-mcp:latest
+    restart: unless-stopped
+    profiles:
+      - mcp
+    networks:
+      - cognee-network
+    build:
+      context: .
+      dockerfile: docker/cognee-mcp/Dockerfile
+    volumes:
+      - .env:/app/.env
+      - ./data/cognee-mcp:/app/data
+    environment:
+      - DEBUG=false
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - TRANSPORT_MODE=sse
+      - DB_PROVIDER=${DB_PROVIDER:-sqlite}
+      - DB_HOST=${DB_HOST:-postgres}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-cognee_db}
+      - DB_USERNAME=${DB_USERNAME:-cognee}
+      - DB_PASSWORD=${DB_PASSWORD:-cognee}
+      - MCP_LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8001:8000"
+      - "5679:5678"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4GB
+        reservations:
+          cpus: "1.0"
+          memory: 2GB
+    depends_on:
+      - cognee
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    container_name: cognee-frontend
+    image: cognee-frontend:latest
+    restart: unless-stopped
+    profiles:
+      - ui
+    build:
+      context: .
+      dockerfile: docker/cognee-frontend/Dockerfile
+    volumes:
+      - ../project/cognee/cognee-frontend/src:/app/src
+      - ../project/cognee/cognee-frontend/public:/app/public
+      - ./data/frontend:/app/.next
+    ports:
+      - "3000:3000"
+    networks:
+      - cognee-network
+    depends_on:
+      - cognee
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  neo4j:
+    image: neo4j:latest
+    container_name: neo4j
+    restart: unless-stopped
+    profiles:
+      - neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/pleaseletmein
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    networks:
+      - cognee-network
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "pleaseletmein", "RETURN 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  chromadb:
+    image: chromadb/chroma:0.6.3
+    container_name: chromadb
+    restart: unless-stopped
+    profiles:
+      - chromadb
+    environment:
+      - IS_PERSISTENT=TRUE
+      - CHROMA_SERVER_AUTH_CREDENTIALS=${VECTOR_DB_KEY:-test-token}
+      - CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER=chromadb.auth.token.TokenConfigServerAuthCredentialsProvider
+      - CHROMA_SERVER_AUTH_TOKEN_TRANSPORT_HEADER=AUTHORIZATION
+      - CHROMA_SERVER_AUTH_PROVIDER=chromadb.auth.token.TokenAuthServerProvider
+    volumes:
+      - chromadb_data:/chroma/chroma/
+    networks:
+      - cognee-network
+    ports:
+      - "3002:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: postgres
+    restart: unless-stopped
+    profiles:
+      - postgres
+    environment:
+      POSTGRES_USER: cognee
+      POSTGRES_PASSWORD: cognee
+      POSTGRES_DB: cognee_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - cognee-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognee"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    profiles:
+      - redis
+    ports:
+      - "6379:6379"
+    networks:
+      - cognee-network
+    volumes:
+      - redis_data:/data
+    command: [ "redis-server", "--appendonly", "yes" ]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    container_name: redisinsight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    networks:
+      - cognee-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5540"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  cognee-network:
+    name: cognee-network
+    driver: bridge
+
+volumes:
+  chromadb_data:
+    driver: local
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+

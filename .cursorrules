@@ -1,0 +1,118 @@
+# CozyCognee 项目规则
+
+## 📚 文档组织规则（强制要求）
+
+### 文档位置规则
+- **所有文档必须放在 `docs/` 目录下**
+- **禁止在项目根目录或其他目录创建文档文件（.md, .txt 等）**
+- **README.md 文件例外：**
+  - 项目根目录的 `README.md` 是项目主文档，允许存在
+  - 各子目录的 `README.md` 用于说明该目录用途，允许存在
+  - 但详细的技术文档、使用文档、开发文档等必须放在 `docs/` 目录下
+
+### 文档目录结构
+```
+docs/
+├── README.md                    # 文档索引和导航
+├── PROJECT_STRUCTURE.md         # 项目结构说明
+├── deployment/                  # 部署相关文档
+│   └── README.md
+├── development/                  # 开发相关文档
+│   └── README.md
+├── usage/                       # 使用相关文档
+│   └── README.md
+└── [其他分类]/                   # 按需添加其他分类
+    └── README.md
+```
+
+### 文档命名规范
+- 使用有意义的文件名，清晰描述文档内容
+- 使用 kebab-case（短横线分隔）命名：`deployment-guide.md`
+- 主要文档使用 `README.md` 作为文件名
+- 避免使用中文文件名（内容可以使用中文）
+
+### 文档分类原则
+- **deployment/**: 部署、运维、配置相关文档
+- **development/**: 开发环境、开发流程、代码规范相关文档
+- **usage/**: 使用指南、API 文档、最佳实践相关文档
+- **其他分类**: 根据项目需要添加，如 `api/`, `troubleshooting/`, `contributing/` 等
+
+## 🚫 禁止的操作
+
+1. **禁止在根目录创建文档文件**（除 README.md 外）
+   - ❌ `根目录/部署指南.md`
+   - ❌ `根目录/使用说明.md`
+   - ✅ `docs/deployment/README.md`
+   - ✅ `docs/usage/README.md`
+
+2. **禁止在 deployment/ 目录下创建详细文档**
+   - ❌ `deployment/部署说明.md`
+   - ✅ `deployment/README.md`（简要说明）
+   - ✅ `docs/deployment/README.md`（详细文档）
+
+3. **禁止在项目根目录创建结构说明文档**
+   - ❌ `根目录/PROJECT_STRUCTURE.md`
+   - ✅ `docs/PROJECT_STRUCTURE.md`
+
+## ✅ 正确的文档组织示例
+
+### 示例 1: 添加新的部署文档
+```
+docs/
+└── deployment/
+    ├── README.md              # 主部署文档
+    ├── docker-guide.md        # Docker 部署指南
+    └── kubernetes-guide.md    # Kubernetes 部署指南
+```
+
+### 示例 2: 添加 API 文档
+```
+docs/
+└── api/
+    ├── README.md              # API 文档索引
+    ├── rest-api.md            # REST API 文档
+    └── mcp-api.md             # MCP API 文档
+```
+
+### 示例 3: 添加故障排查文档
+```
+docs/
+└── troubleshooting/
+    ├── README.md              # 故障排查索引
+    ├── common-issues.md       # 常见问题
+    └── error-codes.md        # 错误代码说明
+```
+
+## 📝 文档维护规则
+
+1. **保持文档更新**: 代码变更时同步更新相关文档
+2. **文档索引**: 在 `docs/README.md` 中维护文档索引
+3. **交叉引用**: 使用相对路径进行文档间的交叉引用
+4. **版本控制**: 重要变更在文档中记录版本信息
+
+## 🔍 检查清单
+
+创建或修改文档时，请确认：
+- [ ] 文档是否放在 `docs/` 目录下的适当子目录？
+- [ ] 是否在 `docs/README.md` 中添加了索引？
+- [ ] 文件名是否符合命名规范？
+- [ ] 是否避免了在根目录创建文档文件？
+
+## 🎯 项目特定规则
+
+### CozyCognee 项目文档分类
+- **deployment/**: Docker Compose 部署、1Panel 部署、环境配置
+- **development/**: 本地开发、Docker 开发、代码同步、构建镜像
+- **usage/**: API 使用、前端使用、MCP 集成、最佳实践
+
+### 文档链接规范
+- 项目根目录 `README.md` 链接到 `docs/` 目录下的详细文档
+- `docs/README.md` 作为文档导航中心
+- 使用相对路径进行文档间链接
+
+## ⚠️ 重要提醒
+
+**所有文档必须放在 `docs/` 目录下并按子目录整理！**
+
+违反此规则的文件将被视为不符合项目规范，需要在代码审查时修正。
+
