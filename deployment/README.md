@@ -57,7 +57,25 @@ docker-compose up -d cognee
 ### Docker Compose 文件
 
 - **docker-compose.yml**: 标准 Docker Compose 配置，适用于本地开发和测试
-- **docker-compose.1panel.yml**: 1Panel 编排配置，包含健康检查和资源限制
+- **docker-compose.1panel.yml**: 1Panel 编排配置
+  - 使用外部网络 `1panel-network`
+  - 所有数据存储在 `/data/cognee` 目录
+  - 不包含 build 配置，镜像需单独构建
+  - 包含 PostgreSQL、Redis、Qdrant、MinIO 等依赖服务
+
+### 镜像构建
+
+**重要**: `docker-compose.1panel.yml` 不包含 build 配置，需要先构建镜像：
+
+```bash
+# 构建所有镜像
+./scripts/build-images.sh [version]
+
+# 或构建单个镜像
+./scripts/build-image.sh <service> [version]
+```
+
+详细说明请参考 [scripts/README.md](scripts/README.md)
 
 ### Docker 文件
 

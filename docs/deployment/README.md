@@ -79,33 +79,66 @@
 
 - 已安装 1Panel
 - Docker 和 Docker Compose（通常 1Panel 已包含）
+- 已构建 Docker 镜像（见下方说明）
+
+### 重要提示
+
+**1Panel 版本的 docker-compose 文件不包含 build 配置**，需要先构建镜像：
+
+```bash
+cd deployment
+# 构建所有镜像
+./scripts/build-images.sh [version]
+
+# 或构建单个镜像
+./scripts/build-image.sh cognee [version]
+```
+
+详细说明请参考 [deployment/scripts/README.md](../deployment/scripts/README.md)
 
 ### 部署步骤
 
-1. **在 1Panel 中创建应用**
+1. **构建 Docker 镜像**
+
+   ```bash
+   cd deployment
+   # 构建所有镜像（推荐）
+   ./scripts/build-images.sh v1.0.0
+   
+   # 或只构建需要的镜像
+   ./scripts/build-image.sh cognee v1.0.0
+   ./scripts/build-image.sh cognee-frontend v1.0.0  # 可选
+   ./scripts/build-image.sh cognee-mcp v1.0.0  # 可选
+   ```
+
+2. **在 1Panel 中创建应用**
 
    - 登录 1Panel 管理界面
    - 进入"应用商店"或"容器"页面
    - 选择"Compose 项目"或"自定义应用"
 
-2. **上传配置文件**
+3. **上传配置文件**
 
    - 使用 `deployment/docker-compose.1panel.yml` 文件
    - 或直接在 1Panel 中创建 Compose 项目
 
-3. **配置环境变量**
+4. **配置数据目录**
 
-   - 在 1Panel 界面中配置环境变量
-   - 或使用 `.env` 文件
+   确保以下目录存在并有正确权限：
+   ```bash
+   sudo mkdir -p /data/cognee/{data,logs,postgres,redis,qdrant,minio,neo4j/{data,logs,import,plugins},redisinsight,mcp,frontend}
+   sudo chown -R $USER:$USER /data/cognee
+   ```
 
-4. **配置数据卷**
+5. **配置网络**
 
-   确保以下目录已正确挂载：
-   - `./data/cognee` - Cognee 数据目录
-   - `./data/cognee-mcp` - MCP 数据目录
-   - `./data/frontend` - 前端构建缓存
+   确保 `1panel-network` 网络已存在：
+   ```bash
+   docker network ls | grep 1panel-network
+   # 如果不存在，1Panel 会自动创建
+   ```
 
-5. **启动服务**
+6. **启动服务**
 
    - 在 1Panel 界面中启动服务
    - 或使用命令行：
@@ -118,10 +151,44 @@
 
 1Panel 版本的配置特点：
 
-- 所有服务都设置了 `restart: unless-stopped`
-- 添加了健康检查（healthcheck）
-- 配置了资源限制和预留
-- 数据目录使用相对路径，便于 1Panel 管理
+- **外部网络**: 使用 `1panel-network`（外部网络）
+- **数据存储**: 所有数据存储在 `/data/cognee` 目录
+- **服务标签**: 所有服务包含 `createdBy: "Apps"` 标签
+- **健康检查**: 所有服务配置了健康检查
+- **依赖服务**: 包含 PostgreSQL、Redis、Qdrant、MinIO
+- **无构建**: 不包含 build 配置，镜像需单独构建和管理
+
+### 数据目录结构
+
+```
+/data/cognee/
+├── data/          # Cognee 应用数据
+├── logs/          # 应用日志
+├── postgres/      # PostgreSQL 数据
+├── redis/         # Redis 数据
+├── qdrant/        # Qdrant 向量数据库数据
+├── minio/         # MinIO 对象存储数据
+├── neo4j/         # Neo4j 图数据库数据
+│   ├── data/      # 数据库文件
+│   ├── logs/      # 日志文件
+│   ├── import/    # 导入数据目录
+│   └── plugins/   # 插件目录
+├── redisinsight/  # Redis Insight 数据
+├── mcp/           # MCP 服务数据（可选）
+└── frontend/      # 前端构建缓存（可选）
+```
+
+### 服务配置
+
+- **cognee**: 主应用服务，端口 8000
+- **cognee-mcp**: MCP 服务（可选），端口 8001
+- **frontend**: 前端服务（可选），端口 3000
+- **postgres**: PostgreSQL 数据库，端口 5432
+- **redis**: Redis 缓存，端口 6379
+- **qdrant**: Qdrant 向量数据库，端口 6333/6334
+- **minio**: MinIO 对象存储，端口 9000/9001
+- **neo4j**: Neo4j 图数据库，端口 7474 (HTTP), 7687 (Bolt)
+- **redisinsight**: Redis Insight 管理工具，端口 5540
 
 ## 环境配置
 
