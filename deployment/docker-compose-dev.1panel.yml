@@ -121,6 +121,7 @@ services:
     image: redislabs/redisinsight:latest
     container_name: cognee_redisinsight
     restart: unless-stopped
+    user: "0:0"  # 以 root 用户运行
     ports:
       - "5540:5540"
     volumes:
