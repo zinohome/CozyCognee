@@ -1,0 +1,4 @@
+# 此文件用于保持 project/ 目录在 Git 中
+# project/cognee/ 目录包含 Cognee 官方项目的完整代码
+# 使用 scripts/init-project.sh 脚本初始化此目录
+
