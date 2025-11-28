@@ -160,9 +160,9 @@ services:
       # - CORS_ALLOWED_ORIGINS=*
       # - EXTRAS=api,postgres,neo4j
       # - TELEMETRY_DISABLED=1
-    depends_on:
-      cognee:
-        condition: service_healthy
+    #depends_on:
+    #  cognee:
+    #    condition: service_healthy
       # API Mode 下不需要直接依赖 postgres（通过 cognee API 访问）
       # postgres:
       #   condition: service_healthy
