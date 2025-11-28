@@ -27,32 +27,29 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # 优化：使用源代码而不是 PyPI 包，大幅减小镜像体积（从 8.5GB 减少到 ~1.5-2GB）
-# 参考 cognee Dockerfile 的构建方式，避免从 PyPI 安装包含 docs extra 的完整包
+# 完全按照 cognee Dockerfile 的构建方式，确保一致性
 # 
 # 关键优化：
-# 1. 先复制 cognee 源代码，然后修改 pyproject.toml 使用本地路径
+# 1. 使用本地 cognee 源代码（避免从 PyPI 安装包含 docs extra 的完整包）
 # 2. 移除 docs extra（unstructured 包占用 3-5GB）
 # 3. 只安装必要的 extras（postgres, neo4j）
+# 注意：onnxruntime 和 fastembed 默认安装 CPU 版本，不会安装 NVIDIA 驱动（与 cognee 一致）
 
-# 1. 先复制 cognee 源代码（必须在修改 pyproject.toml 之前）
+# 1. 复制 cognee 源代码（必须在安装依赖之前，因为使用 file:// 路径）
 COPY project/cognee/cognee /app/cognee
 COPY project/cognee/distributed /app/distributed
 COPY project/cognee/pyproject.toml /app/cognee-pyproject.toml
 
-# 2. 优化：移除 cognee 中不必要的依赖（onnxruntime, fastembed 会安装 NVIDIA 包）
-# MCP 服务器不需要这些依赖，它们会大幅增加镜像大小并安装 NVIDIA/CUDA 相关包
-RUN sed -i '/onnxruntime/d' /app/cognee-pyproject.toml && \
-    sed -i '/fastembed/d' /app/cognee-pyproject.toml
-
-# 3. 复制 cognee-mcp 的依赖文件
+# 2. 复制 cognee-mcp 的依赖文件
 COPY project/cognee/cognee-mcp/pyproject.toml project/cognee/cognee-mcp/uv.lock project/cognee/cognee-mcp/entrypoint.sh ./
 
-# 4. 修改 pyproject.toml：使用本地 cognee 源代码，移除 docs extra
+# 3. 修改 pyproject.toml：使用本地 cognee 源代码，移除 docs extra
 # 这样可以避免从 PyPI 安装包含 unstructured 的完整包
 RUN sed -i 's|"cognee\[postgres,docs,neo4j\]==0.3.7"|"cognee[postgres,neo4j] @ file:///app"|' pyproject.toml
 
-# 5. 安装依赖（使用本地 cognee 源代码，不包含 docs extra，不包含 NVIDIA 相关依赖）
-# 注意：由于修改了 cognee 的依赖，不能使用 --frozen（lock 文件不匹配）
+# 4. 安装依赖（使用本地 cognee 源代码，不包含 docs extra）
+# 注意：由于使用本地路径，不能使用 --frozen（lock 文件不匹配）
+# onnxruntime 和 fastembed 默认安装 CPU 版本，不会安装 NVIDIA 驱动（与 cognee 一致）
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-install-project --no-dev --no-editable
 
@@ -60,9 +57,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY project/cognee/alembic.ini /app/alembic.ini
 COPY project/cognee/alembic/ /app/alembic
 
-# 6. 复制 cognee-mcp 源代码并安装项目
+# 6. 复制 cognee-mcp 源代码并安装项目（与 cognee Dockerfile 一致）
 COPY project/cognee/cognee-mcp/src /app/src
-# 注意：由于修改了 cognee 的依赖，不能使用 --frozen
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-dev --no-editable
 
