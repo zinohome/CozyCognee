@@ -39,16 +39,22 @@ COPY project/cognee/cognee /app/cognee
 COPY project/cognee/distributed /app/distributed
 COPY project/cognee/pyproject.toml /app/cognee-pyproject.toml
 
-# 2. 复制 cognee-mcp 的依赖文件
+# 2. 优化：移除 cognee 中不必要的依赖（onnxruntime, fastembed 会安装 NVIDIA 包）
+# MCP 服务器不需要这些依赖，它们会大幅增加镜像大小并安装 NVIDIA/CUDA 相关包
+RUN sed -i '/onnxruntime/d' /app/cognee-pyproject.toml && \
+    sed -i '/fastembed/d' /app/cognee-pyproject.toml
+
+# 3. 复制 cognee-mcp 的依赖文件
 COPY project/cognee/cognee-mcp/pyproject.toml project/cognee/cognee-mcp/uv.lock project/cognee/cognee-mcp/entrypoint.sh ./
 
-# 3. 修改 pyproject.toml：使用本地 cognee 源代码，移除 docs extra
+# 4. 修改 pyproject.toml：使用本地 cognee 源代码，移除 docs extra
 # 这样可以避免从 PyPI 安装包含 unstructured 的完整包
 RUN sed -i 's|"cognee\[postgres,docs,neo4j\]==0.3.7"|"cognee[postgres,neo4j] @ file:///app"|' pyproject.toml
 
-# 4. 安装依赖（使用本地 cognee 源代码，不包含 docs extra）
+# 5. 安装依赖（使用本地 cognee 源代码，不包含 docs extra，不包含 NVIDIA 相关依赖）
+# 注意：由于修改了 cognee 的依赖，不能使用 --frozen（lock 文件不匹配）
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev --no-editable
+    uv sync --no-install-project --no-dev --no-editable
 
 # 5. 复制 Alembic 配置（如果需要数据库迁移）
 COPY project/cognee/alembic.ini /app/alembic.ini
@@ -56,8 +62,9 @@ COPY project/cognee/alembic/ /app/alembic
 
 # 6. 复制 cognee-mcp 源代码并安装项目
 COPY project/cognee/cognee-mcp/src /app/src
+# 注意：由于修改了 cognee 的依赖，不能使用 --frozen
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable
+    uv sync --no-dev --no-editable
 
 FROM python:3.12-slim-bookworm
 

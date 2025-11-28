@@ -1,0 +1,42 @@
+[project]
+name = "cognee-mcp-direct"
+version = "0.4.0"
+description = "Cognee MCP server - Direct Mode (Optimized, no NVIDIA dependencies)"
+requires-python = ">=3.10"
+
+# Direct Mode 下的优化依赖
+# 使用本地 cognee 源代码，但排除不必要的依赖（onnxruntime, fastembed 等）
+# 这些依赖会安装 NVIDIA/CUDA 包，但 MCP 服务器不需要
+dependencies = [
+    # 使用本地 cognee 源代码（通过 file:// 路径）
+    # 只包含必要的 extras，不包含 docs（unstructured 很大）
+    "cognee[postgres,neo4j] @ file:///app",
+    "fastmcp>=2.10.0,<3.0.0",
+    "mcp>=1.12.0,<2.0.0",
+    "httpx>=0.27.0,<1.0.0",
+]
+
+authors = [
+    { name = "Boris Arzentar", email = "boris@topoteretes.com" },
+    { name = "Igor Ilic", email = "igor@topoteretes.com" },
+    { name = "Laszlo Hajdu", email = "laszlo@topoteretes.com" },
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[dependency-groups]
+dev = [
+    "debugpy>=1.8.12,<2.0.0",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project.scripts]
+cognee-mcp = "src:main_mcp"
+

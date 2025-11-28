@@ -21,6 +21,7 @@ docker build -f deployment/docker/cognee-mcp/Dockerfile.api -t cognee-mcp:api-la
 **优化内容**：
 - 使用本地 cognee 源代码而不是从 PyPI 安装
 - 移除 docs extra（unstructured 包占用 3-5GB）
+- **移除 NVIDIA 相关依赖**（onnxruntime, fastembed）- 这些包会安装 CUDA/NVIDIA 驱动，但 MCP 服务器不需要
 - 只安装必要的 extras（postgres, neo4j）
 
 **关键优化**：
@@ -28,12 +29,25 @@ docker build -f deployment/docker/cognee-mcp/Dockerfile.api -t cognee-mcp:api-la
 # 1. 先复制 cognee 源代码
 COPY project/cognee/cognee /app/cognee
 COPY project/cognee/distributed /app/distributed
+COPY project/cognee/pyproject.toml /app/cognee-pyproject.toml
 
-# 2. 修改 pyproject.toml 使用本地路径，移除 docs extra
+# 2. 移除不必要的依赖（onnxruntime, fastembed 会安装 NVIDIA 包）
+RUN sed -i '/onnxruntime/d' /app/cognee-pyproject.toml && \
+    sed -i '/fastembed/d' /app/cognee-pyproject.toml
+
+# 3. 修改 pyproject.toml 使用本地路径，移除 docs extra
 RUN sed -i 's|"cognee\[postgres,docs,neo4j\]==0.3.7"|"cognee[postgres,neo4j] @ file:///app"|' pyproject.toml
 ```
 
-**预期镜像大小**：~1.5-2GB（从 8.5GB 减少）
+**为什么移除 onnxruntime 和 fastembed？**
+- `onnxruntime`：ONNX Runtime 默认会尝试安装 CUDA 版本，包含 NVIDIA 驱动
+- `fastembed`：FastEmbed 可能依赖 PyTorch，而 PyTorch 可能包含 CUDA 支持
+- MCP 服务器在 Direct Mode 下不需要这些依赖，它们会：
+  - 大幅增加镜像大小（NVIDIA 驱动和相关库）
+  - 增加构建时间
+  - 在非 NVIDIA GPU 环境中完全无用
+
+**预期镜像大小**：~1.5-2GB（从 8.5GB 减少，且不包含 NVIDIA 相关包）
 
 ## 构建说明
 
