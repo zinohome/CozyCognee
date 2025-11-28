@@ -68,6 +68,8 @@ FROM python:3.12-slim-bookworm
 
 RUN apt-get update && apt-get install -y \
     libpq5 \
+    curl \
+    wget \
     # playwright 浏览器运行时依赖
     libnss3 \
     libnspr4 \
