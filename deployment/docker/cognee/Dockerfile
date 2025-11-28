@@ -46,6 +46,11 @@ COPY project/cognee/alembic/ /app/alembic
 # Installing separately from its dependencies allows optimal layer caching
 COPY project/cognee/cognee /app/cognee
 COPY project/cognee/distributed /app/distributed
+
+# Apply CozyCognee patches (CORS configuration)
+# Replace the CORS configuration in client.py with our patched version
+COPY deployment/docker/cognee/patches/cognee/api/client.py /app/cognee/api/client.py
+
 RUN --mount=type=cache,target=/root/.cache/uv \
 uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --frozen --no-dev --no-editable
 
