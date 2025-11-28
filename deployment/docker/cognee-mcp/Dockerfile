@@ -32,23 +32,24 @@ RUN apt-get update && apt-get install -y \
 # 关键优化：
 # 1. 使用本地 cognee 源代码（避免从 PyPI 安装包含 docs extra 的完整包）
 # 2. 移除 docs extra（unstructured 包占用 3-5GB）
-# 3. 只安装必要的 extras（postgres, neo4j）
+# 3. 只安装必要的 extras（postgres, neo4j, scraping）
 # 注意：onnxruntime 和 fastembed 默认安装 CPU 版本，不会安装 NVIDIA 驱动（与 cognee 一致）
 
-# 1. 复制 cognee 源代码和必要文件（必须在安装依赖之前，因为使用 file:// 路径）
+# 1. 将 cognee 源代码放在子目录中，避免与 cognee-mcp 的 pyproject.toml 冲突
 # 与 cognee Dockerfile 保持一致：需要 README.md 用于构建
-COPY project/cognee/README.md /app/README.md
-COPY project/cognee/cognee /app/cognee
-COPY project/cognee/distributed /app/distributed
-COPY project/cognee/pyproject.toml /app/cognee-pyproject.toml
+COPY project/cognee/README.md /app/cognee-source/README.md
+COPY project/cognee/pyproject.toml /app/cognee-source/pyproject.toml
+COPY project/cognee/cognee /app/cognee-source/cognee
+COPY project/cognee/distributed /app/cognee-source/distributed
 
 # 2. 复制 cognee-mcp 的依赖文件
 COPY project/cognee/cognee-mcp/pyproject.toml project/cognee/cognee-mcp/uv.lock project/cognee/cognee-mcp/entrypoint.sh ./
 
 # 3. 修改 pyproject.toml：使用本地 cognee 源代码，移除 docs extra，添加 scraping extra
+# 使用 file:///app/cognee-source 指向 cognee 源代码目录
 # 这样可以避免从 PyPI 安装包含 unstructured 的完整包
 # 添加 scraping extra 以安装 protego 和 playwright（消除警告，与 cognee 一致）
-RUN sed -i 's|"cognee\[postgres,docs,neo4j\]==0.3.7"|"cognee[postgres,neo4j,scraping] @ file:///app"|' pyproject.toml
+RUN sed -i 's|"cognee\[postgres,docs,neo4j\]==0.3.7"|"cognee[postgres,neo4j,scraping] @ file:///app/cognee-source"|' pyproject.toml
 
 # 4. 安装依赖（使用本地 cognee 源代码，不包含 docs extra，包含 scraping extra）
 # 注意：由于使用本地路径，不能使用 --frozen（lock 文件不匹配）
@@ -57,11 +58,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-install-project --no-dev --no-editable
 
 # 5. 复制 Alembic 配置（如果需要数据库迁移）
+# 注意：Alembic 配置用于 cognee 的数据库迁移，在 Direct Mode 下可能需要
 COPY project/cognee/alembic.ini /app/alembic.ini
 COPY project/cognee/alembic/ /app/alembic
 
 # 6. 复制 cognee-mcp 源代码并安装项目（与 cognee Dockerfile 一致）
 COPY project/cognee/cognee-mcp/src /app/src
+
+# 应用 CozyCognee patches (CORS 配置)
+# 复制 patch 脚本并应用到 server.py
+COPY deployment/docker/cognee-mcp/patch_cors.py /tmp/patch_cors.py
+RUN python3 /tmp/patch_cors.py /app/src/server.py && rm /tmp/patch_cors.py
+
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-dev --no-editable
 

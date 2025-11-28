@@ -94,29 +94,112 @@ services:
       retries: 3
       start_period: 40s
 
+  # Cognee MCP 服务（可选）
+  # 注意：cognee-mcp 有两种运行模式：
+  # 1. Direct Mode（直接模式）：直接使用 cognee 库，需要所有 cognee 的环境变量
+  #    使用镜像: cognee-mcp:latest (约 8.5GB，包含完整依赖)
+  # 2. API Mode（API 模式）：连接到 cognee API 服务器，只需要 API_URL
+  #    使用镜像: cognee-mcp:api-latest (约 2-3GB，轻量级，推荐)
+  # 
+  # 当前配置为 API Mode（轻量级），如需 Direct Mode，请：
+  # 1. 将 image 改为 cognee-mcp:latest
+  # 2. 取消注释下面的 LLM 和数据库配置
+  # 3. 注释掉 API_URL 配置
+  cognee-mcp:
+    image: cognee-mcp:api-0.4.1  # 使用轻量级 API Mode 镜像
+    container_name: cognee-mcp
+    restart: unless-stopped
+    profiles:
+      - mcp
+    ports:
+      - "8001:8000"
+    environment:
+      # ==================== 基础配置 ====================
+      - DEBUG=false
+      - ENVIRONMENT=production
+      - PYTHONUNBUFFERED=1
+      # ==================== MCP 配置 ====================
+      - TRANSPORT_MODE=sse  # 可选: stdio, sse, http
+      - MCP_LOG_LEVEL=INFO
+      # ==================== API Mode 配置 ====================
+      # API Mode 下只需要配置 API URL，不需要 LLM、数据库等配置
+      - API_URL=http://cognee:8000
+      # - API_TOKEN=your-api-token  # 如果 API 启用了认证，取消注释并设置
+      # ==================== Direct Mode 配置（已注释，API Mode 不需要）====================
+      # 如果使用 Direct Mode（cognee-mcp:latest），取消注释以下配置并注释掉 API_URL
+      # - LOG_LEVEL=ERROR
+      # - LLM_API_KEY=your-llm-api-key-here
+      # - LLM_PROVIDER=openai
+      # - LLM_MODEL=gpt-4o-mini
+      # - LLM_ENDPOINT=https://oneapi.naivehero.top/v1
+      # - LLM_MAX_TOKENS=16384
+      # - DATABASE_URL=postgresql://cognee_user:cognee_password@postgres:5432/cognee_db
+      # - DB_PROVIDER=postgres
+      # - DB_HOST=postgres
+      # - DB_PORT=5432
+      # - DB_NAME=cognee_db
+      # - DB_USERNAME=cognee_user
+      # - DB_PASSWORD=cognee_password
+      # - VECTOR_DB_PROVIDER=pgvector
+      # - GRAPH_DATABASE_PROVIDER=neo4j
+      # - NEO4J_URL=bolt://neo4j:7687
+      # - NEO4J_USER=neo4j
+      # - NEO4J_PASSWORD=pleaseletmein
+      # - REDIS_URL=redis://:cognee_redis_password@redis:6379/0
+      # - S3_ENDPOINT=http://minio:9000
+      # - S3_ACCESS_KEY=minioadmin
+      # - S3_SECRET_KEY=minioadmin
+      # - S3_BUCKET_NAME=cognee-storage
+      # - S3_USE_SSL=false
+      # ==================== CORS 配置 ====================
+      # 允许的跨域来源（逗号分隔）
+      # 如果不设置，默认只允许 UI_APP_URL（默认 http://localhost:3000）
+      # 注意：必须包含前端访问的地址（http://192.168.66.11:3000），否则会出现 CORS 错误
+      - CORS_ALLOWED_ORIGINS=http://192.168.99.100:3000,http://192.168.66.11:3000,http://localhost:3000,http://127.0.0.1:3000,http://192.168.66.11:8000,http://localhost:8000,http://127.0.0.1:8000,http://192.168.66.11:8001
+      # 或者允许所有来源（不推荐用于生产环境）
+      # - CORS_ALLOWED_ORIGINS=*
+      # - EXTRAS=api,postgres,neo4j
+      # - TELEMETRY_DISABLED=1
+    depends_on:
+      cognee:
+        condition: service_healthy
+      # API Mode 下不需要直接依赖 postgres（通过 cognee API 访问）
+      # postgres:
+      #   condition: service_healthy
+    volumes:
+      - /data/cognee/mcp:/app/data
+    networks:
+      - 1panel-network
+    labels:
+      createdBy: "Apps"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # Cognee 前端服务
   frontend:
     image: cognee-frontend:0.4.1
     container_name: cognee-frontend
     restart: unless-stopped
-    # 注意：如果使用 profiles，需要在启动时指定 --profile ui
-    # 如果希望默认启动，可以注释掉 profiles 配置
-    # profiles:
-    #   - ui
+    #profiles:
+    #  - ui
     ports:
       - "3000:3000"
     environment:
       # 运行时环境变量（会覆盖构建时的默认值）
       # 注意：NEXT_PUBLIC_* 变量在开发模式下可以在运行时修改
-      # fetch.ts 会自动添加 /api 前缀，所以这里只需要基础 URL（不包含 /api）
-      - NEXT_PUBLIC_BACKEND_API_URL=http://cognee:8000
-      - NEXT_PUBLIC_CLOUD_API_URL=http://cognee-mcp:8000
-      - NEXT_PUBLIC_MCP_API_URL=http://cognee-mcp:8000
+      - NEXT_PUBLIC_BACKEND_API_URL=http://192.168.66.11:8000
+      # NEXT_PUBLIC_CLOUD_API_URL: 本地部署不需要 cloud API，留空或注释掉
+      # 如果设置为 MCP 服务器地址，会导致 400 错误（MCP 服务器没有 /api/v1/checks/connection 端点）
+      # - NEXT_PUBLIC_CLOUD_API_URL=http://192.168.66.11:8001
+      - NEXT_PUBLIC_MCP_API_URL=http://192.168.66.11:8001
       - NEXT_PUBLIC_COGWIT_API_KEY=
       - NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=false
-    depends_on:
-      cognee:
-        condition: service_healthy
+    #depends_on:
+    #  cognee:
+    #    condition: service_healthy
     networks:
       - 1panel-network
     labels:
