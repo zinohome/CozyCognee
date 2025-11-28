@@ -8,7 +8,7 @@ WORKDIR /app
 # 构建上下文是项目根目录，所以路径是 project/cognee/cognee-frontend/...
 COPY project/cognee/cognee-frontend/package.json project/cognee/cognee-frontend/package-lock.json ./
 
-# Install any needed packages specified in package.json
+# Install dependencies
 RUN npm ci
 RUN npm rebuild lightningcss
 
@@ -19,6 +19,26 @@ COPY project/cognee/cognee-frontend/next.config.mjs .
 COPY project/cognee/cognee-frontend/postcss.config.mjs .
 COPY project/cognee/cognee-frontend/tsconfig.json .
 
-# Build the app and run it
+# Build arguments for environment variables (NEXT_PUBLIC_*)
+# 这些变量在运行时可用，Next.js 会在客户端使用它们
+ARG NEXT_PUBLIC_BACKEND_API_URL=http://cognee:8000/api
+ARG NEXT_PUBLIC_CLOUD_API_URL=http://cognee-mcp:8000
+ARG NEXT_PUBLIC_MCP_API_URL=http://cognee-mcp:8000
+ARG NEXT_PUBLIC_COGWIT_API_KEY=
+ARG NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=false
+
+# Set environment variables (这些会在运行时可用)
+ENV NEXT_PUBLIC_BACKEND_API_URL=${NEXT_PUBLIC_BACKEND_API_URL}
+ENV NEXT_PUBLIC_CLOUD_API_URL=${NEXT_PUBLIC_CLOUD_API_URL}
+ENV NEXT_PUBLIC_MCP_API_URL=${NEXT_PUBLIC_MCP_API_URL}
+ENV NEXT_PUBLIC_COGWIT_API_KEY=${NEXT_PUBLIC_COGWIT_API_KEY}
+ENV NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=${NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT}
+
+# Disable telemetry
+ENV NEXT_TELEMETRY_DISABLED=1
+
+EXPOSE 3000
+
+# Start the development server
 CMD ["npm", "run", "dev"]
 

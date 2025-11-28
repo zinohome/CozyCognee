@@ -70,6 +70,33 @@ echo "构建上下文: $PROJECT_ROOT"
 echo "Dockerfile: $DEPLOYMENT_DIR/$DOCKERFILE"
 echo ""
 
+# 构建参数（仅前端需要，可选）
+BUILD_ARGS=""
+if [ "$SERVICE" = "cognee-frontend" ] || [ "$SERVICE" = "frontend" ]; then
+    # 如果设置了环境变量，则传递给构建参数
+    # 如果没有设置，使用 Dockerfile 中的默认值
+    if [ -n "$NEXT_PUBLIC_BACKEND_API_URL" ]; then
+        BUILD_ARGS="$BUILD_ARGS --build-arg NEXT_PUBLIC_BACKEND_API_URL=$NEXT_PUBLIC_BACKEND_API_URL"
+        echo "使用构建参数: NEXT_PUBLIC_BACKEND_API_URL=$NEXT_PUBLIC_BACKEND_API_URL"
+    fi
+    if [ -n "$NEXT_PUBLIC_CLOUD_API_URL" ]; then
+        BUILD_ARGS="$BUILD_ARGS --build-arg NEXT_PUBLIC_CLOUD_API_URL=$NEXT_PUBLIC_CLOUD_API_URL"
+    fi
+    if [ -n "$NEXT_PUBLIC_MCP_API_URL" ]; then
+        BUILD_ARGS="$BUILD_ARGS --build-arg NEXT_PUBLIC_MCP_API_URL=$NEXT_PUBLIC_MCP_API_URL"
+    fi
+    if [ -n "$NEXT_PUBLIC_COGWIT_API_KEY" ]; then
+        BUILD_ARGS="$BUILD_ARGS --build-arg NEXT_PUBLIC_COGWIT_API_KEY=$NEXT_PUBLIC_COGWIT_API_KEY"
+    fi
+    if [ -n "$NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT" ]; then
+        BUILD_ARGS="$BUILD_ARGS --build-arg NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=$NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT"
+    fi
+    if [ -n "$BUILD_ARGS" ]; then
+        echo "注意: 环境变量也可以在 docker-compose.yml 中运行时设置"
+        echo ""
+    fi
+fi
+
 docker build \
     -f "$DEPLOYMENT_DIR/$DOCKERFILE" \
     -t "$IMAGE_NAME:$VERSION" \
@@ -77,6 +104,7 @@ docker build \
     --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --label "org.opencontainers.image.version=$VERSION" \
     --label "org.opencontainers.image.revision=$(git rev-parse HEAD 2>/dev/null || echo 'unknown')" \
+    $BUILD_ARGS \
     .
 
 if [ $? -eq 0 ]; then
