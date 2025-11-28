@@ -49,6 +49,7 @@ WORKDIR /app
 # 只安装运行时必需的库
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # 从构建阶段复制虚拟环境和应用代码（与官方 Dockerfile 保持一致）
