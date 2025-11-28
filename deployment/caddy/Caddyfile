@@ -1,0 +1,97 @@
+# Caddy 反向代理配置
+# 统一后端服务，避免 CORS 问题
+# Caddy 自动处理 HTTPS 和 CORS
+
+:8080
+
+# 客户端请求体大小限制
+request_body {
+    max_size 100MB
+}
+
+# ==================== Cognee 主 API ====================
+# 路径: /api/* -> cognee:8000/api/*
+handle /api/* {
+    reverse_proxy cognee:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        
+        # WebSocket 支持
+        header_up Connection {>Connection}
+        header_up Upgrade {>Upgrade}
+        
+        # 超时设置
+        transport http {
+            dial_timeout 60s
+            response_header_timeout 60s
+        }
+    }
+}
+
+# Cognee 健康检查
+handle /health {
+    reverse_proxy cognee:8000
+}
+
+# ==================== Cognee MCP API Mode ====================
+# 路径: /mcp-api/* -> cognee-mcp-api:8000/*
+handle /mcp-api/* {
+    reverse_proxy cognee-mcp-api:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        
+        # SSE 支持（Server-Sent Events）
+        header_up Connection ""
+        header_up Cache-Control "no-cache"
+        
+        # 超时设置（SSE 需要长连接）
+        transport http {
+            dial_timeout 300s
+            response_header_timeout 300s
+        }
+    }
+}
+
+# MCP API 健康检查
+handle /mcp-api/health {
+    reverse_proxy cognee-mcp-api:8000
+}
+
+# ==================== Cognee MCP Direct Mode ====================
+# 路径: /mcp-direct/* -> cognee-mcp-direct:8000/*
+handle /mcp-direct/* {
+    reverse_proxy cognee-mcp-direct:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        
+        # SSE 支持（Server-Sent Events）
+        header_up Connection ""
+        header_up Cache-Control "no-cache"
+        
+        # 超时设置（SSE 需要长连接）
+        transport http {
+            dial_timeout 300s
+            response_header_timeout 300s
+        }
+    }
+}
+
+# MCP Direct 健康检查
+handle /mcp-direct/health {
+    reverse_proxy cognee-mcp-direct:8000
+}
+
+# ==================== 默认路由 ====================
+# 根路径返回服务信息
+handle {
+    respond '{"status": "ok", "service": "caddy-reverse-proxy", "endpoints": {"/api": "Cognee API", "/mcp-api": "Cognee MCP API Mode", "/mcp-direct": "Cognee MCP Direct Mode"}}' 200 {
+        header Content-Type "application/json"
+    }
+}
+
