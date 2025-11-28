@@ -8,6 +8,7 @@
 - [1Panel 部署](#1panel-部署)
 - [环境配置](#环境配置)
 - [服务说明](#服务说明)
+- [Cognee MCP 部署](./COGNEE_MCP_DEPLOYMENT.md) - MCP 服务器部署指南
 - [故障排查](#故障排查)
 
 ## 标准 Docker Compose 部署
