@@ -23,8 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 复制轻量级 pyproject.toml（API Mode 专用）
 # 使用 pyproject.toml.api，只包含基础依赖，不包含 cognee extras
-# 注意：构建上下文是项目根目录，所以路径是 project/cognee/cognee-mcp/...
-COPY project/cognee/cognee-mcp/pyproject.toml.api ./pyproject.toml
+# 注意：pyproject.toml.api 放在 deployment/docker/cognee-mcp/ 目录下（不在官方代码目录）
+COPY deployment/docker/cognee-mcp/pyproject.toml.api ./pyproject.toml
 COPY project/cognee/cognee-mcp/entrypoint.sh ./
 
 # 使用 uv sync 安装依赖（标准方式，自动解析依赖树）
@@ -37,8 +37,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY project/cognee/cognee-mcp/src /app/src
 
 # 安装项目本身
+# 注意：不使用 --frozen，因为 pyproject.toml.api 没有对应的 uv.lock
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable
+    uv sync --no-dev --no-editable
 
 # 运行时镜像（最小化）
 FROM python:3.12-slim-bookworm

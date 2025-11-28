@@ -6,7 +6,7 @@
 
 **修复的问题**：
 - 移除了 `--frozen` 标志，因为 `pyproject.toml.api` 没有对应的 `uv.lock` 文件
-- 确保路径正确（构建上下文是项目根目录）
+- 确保路径正确：`pyproject.toml.api` 放在 `deployment/docker/cognee-mcp/` 目录下（不在官方代码目录）
 
 **构建命令**：
 ```bash
