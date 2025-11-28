@@ -42,9 +42,9 @@ DATABASE_URL=postgresql://cognee_user:cognee_password@192.168.66.11:5432/cognee_
 # Redis 配置
 REDIS_URL=redis://:cognee_redis_password@192.168.66.11:6379/0
 
-# 向量数据库配置
-VECTOR_DB_PROVIDER=qdrant
-QDRANT_URL=http://192.168.66.11:6333
+# 向量数据库配置（使用 pgvector，向量数据存储在 PostgreSQL 中）
+VECTOR_DB_PROVIDER=pgvector
+# 注意: pgvector 使用与 PostgreSQL 相同的连接，无需额外配置
 
 # 图数据库配置
 GRAPH_DATABASE_PROVIDER=neo4j
@@ -117,8 +117,8 @@ psql -h 192.168.66.11 -U cognee_user -d cognee_db -c "SELECT 1;"
 # 测试 Redis
 redis-cli -h 192.168.66.11 -p 6379 -a cognee_redis_password ping
 
-# 测试 Qdrant
-curl http://192.168.66.11:6333/health
+# pgvector 是 PostgreSQL 的扩展，无需单独测试
+# 向量数据存储在 PostgreSQL 中
 
 # 测试 Neo4j
 curl http://192.168.66.11:7474

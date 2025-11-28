@@ -27,6 +27,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # pgvector 向量数据库（独立的 PostgreSQL 实例，带 pgvector 扩展）
+  pgvector:
+    image: pgvector/pgvector:0.8.1-pg17-trixie
+    container_name: cognee_pgvector
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=cognee_vector_user
+      - POSTGRES_PASSWORD=cognee_vector_password
+      - POSTGRES_DB=cognee_vector_db
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - /data/cognee/pgvector:/var/lib/postgresql/data
+    networks:
+      - 1panel-network
+    labels:
+      createdBy: "Apps"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognee_vector_user -d cognee_vector_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Redis 缓存和消息队列
   redis:
     image: redis:7-alpine
@@ -48,23 +72,6 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-
-  # Qdrant 向量数据库
-  qdrant:
-    image: qdrant/qdrant:v1.15
-    container_name: cognee_qdrant
-    restart: unless-stopped
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    environment:
-      - QDRANT__SERVICE__GRPC_PORT=6334
-    volumes:
-      - /data/cognee/qdrant:/qdrant/storage
-    networks:
-      - 1panel-network
-    labels:
-      createdBy: "Apps"
 
   # MinIO 对象存储 (S3 兼容)
   # 使用 cpuv1 版本以兼容不支持 x86-64-v2 的旧 CPU

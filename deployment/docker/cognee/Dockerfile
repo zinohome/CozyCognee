@@ -34,6 +34,9 @@ COPY ../../project/cognee/README.md ../../project/cognee/pyproject.toml ../../pr
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --frozen --no-install-project --no-dev --no-editable
 
+# Note: pgvector is included in the postgres extra dependencies
+# No additional adapter installation needed for pgvector
+
 # Copy Alembic configuration
 COPY ../../project/cognee/alembic.ini /app/alembic.ini
 COPY ../../project/cognee/alembic/ /app/alembic
@@ -44,6 +47,8 @@ COPY ../../project/cognee/cognee /app/cognee
 COPY ../../project/cognee/distributed /app/distributed
 RUN --mount=type=cache,target=/root/.cache/uv \
 uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --frozen --no-dev --no-editable
+
+# Note: pgvector support is included via postgres extra dependencies
 
 FROM python:3.12-slim-bookworm
 

@@ -104,7 +104,7 @@ CozyCognee/
 - `LLM_API_KEY`: LLM API 密钥（必需）
 - `LLM_PROVIDER`: LLM 提供商（openai, anthropic, groq 等）
 - `DB_PROVIDER`: 数据库类型（sqlite, postgres）
-- `VECTOR_DB_PROVIDER`: 向量数据库类型（chroma, qdrant 等）
+- `VECTOR_DB_PROVIDER`: 向量数据库类型（pgvector, chroma, qdrant 等）
 - `GRAPH_DATABASE_PROVIDER`: 图数据库类型（kuzu, neo4j）
 
 ### 服务配置
@@ -112,9 +112,9 @@ CozyCognee/
 - **cognee**: 核心后端服务，端口 8000
 - **cognee-frontend**: 前端服务，端口 3000
 - **cognee-mcp**: MCP 服务，端口 8001
-- **postgres**: PostgreSQL 数据库，端口 5432
+- **postgres**: PostgreSQL 关系数据库，端口 5432
+- **pgvector**: pgvector 向量数据库（独立的 PostgreSQL 实例），端口 5433
 - **neo4j**: Neo4j 图数据库，端口 7474/7687
-- **chromadb**: ChromaDB 向量数据库，端口 3002
 - **redis**: Redis 缓存，端口 6379
 
 ## 🛠️ 开发

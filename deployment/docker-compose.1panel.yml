@@ -11,7 +11,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # 数据库配置
+      # 关系数据库配置 (标准 PostgreSQL - postgres 服务)
       - DATABASE_URL=postgresql://cognee_user:cognee_password@postgres:5432/cognee_db
       - DB_PROVIDER=postgres
       - DB_HOST=postgres
@@ -21,9 +21,16 @@ services:
       - DB_PASSWORD=cognee_password
       # Redis 配置
       - REDIS_URL=redis://:cognee_redis_password@redis:6379/0
-      # 向量数据库配置 (Qdrant)
-      - VECTOR_DB_PROVIDER=qdrant
-      - QDRANT_URL=http://qdrant:6333
+      # 向量数据库配置 (独立的 pgvector 服务)
+      # 注意: Cognee 的 pgvector 实现会从关系数据库配置获取连接信息
+      # 当前配置：两个独立的 PostgreSQL 服务
+      # - postgres: 标准 PostgreSQL，端口 5432，用于关系数据
+      # - pgvector: 带 pgvector 扩展，端口 5433，用于向量数据
+      # 
+      # 由于代码限制，pgvector 会使用关系数据库的配置（连接到 postgres 服务）
+      # 要实现真正的服务分离，需要修改代码或使用环境变量覆盖
+      # 详细说明请参考: docs/deployment/PGVECTOR_SEPARATION.md
+      - VECTOR_DB_PROVIDER=pgvector
       # 图数据库配置 (Neo4j)
       - GRAPH_DATABASE_PROVIDER=neo4j
       - NEO4J_URL=bolt://neo4j:7687
@@ -45,10 +52,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      pgvector:
+        condition: service_healthy
       redis:
         condition: service_healthy
-      qdrant:
-        condition: service_started
       minio:
         condition: service_started
     volumes:
@@ -156,6 +163,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # pgvector 向量数据库（独立的 PostgreSQL 实例，带 pgvector 扩展）
+  pgvector:
+    image: pgvector/pgvector:0.8.1-pg17-trixie
+    container_name: cognee_pgvector
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=cognee_vector_user
+      - POSTGRES_PASSWORD=cognee_vector_password
+      - POSTGRES_DB=cognee_vector_db
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - /data/cognee/pgvector:/var/lib/postgresql/data
+    networks:
+      - 1panel-network
+    labels:
+      createdBy: "Apps"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognee_vector_user -d cognee_vector_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Redis 缓存和消息队列
   redis:
     image: redis:7-alpine
@@ -177,23 +208,6 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-
-  # Qdrant 向量数据库
-  qdrant:
-    image: qdrant/qdrant:v1.15
-    container_name: cognee_qdrant
-    restart: unless-stopped
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    environment:
-      - QDRANT__SERVICE__GRPC_PORT=6334
-    volumes:
-      - /data/cognee/qdrant:/qdrant/storage
-    networks:
-      - 1panel-network
-    labels:
-      createdBy: "Apps"
 
   # MinIO 对象存储 (S3 兼容)
   # 使用 cpuv1 版本以兼容不支持 x86-64-v2 的旧 CPU

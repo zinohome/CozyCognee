@@ -34,6 +34,9 @@ fi
 
 echo "Database migrations done."
 
+# Note: pgvector is built into PostgreSQL and doesn't require adapter registration
+# If using other vector databases, add registration logic here
+
 echo "Starting server..."
 
 # Add startup delay to ensure DB is ready

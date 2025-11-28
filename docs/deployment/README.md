@@ -126,7 +126,7 @@ cd deployment
 
    确保以下目录存在并有正确权限：
    ```bash
-   sudo mkdir -p /data/cognee/{data,logs,postgres,redis,qdrant,minio,neo4j/{data,logs,import,plugins},redisinsight,mcp,frontend}
+   sudo mkdir -p /data/cognee/{data,logs,postgres,pgvector,redis,minio,neo4j/{data,logs,import,plugins},redisinsight,mcp,frontend}
    sudo chown -R $USER:$USER /data/cognee
    ```
 
@@ -155,7 +155,7 @@ cd deployment
 - **数据存储**: 所有数据存储在 `/data/cognee` 目录
 - **服务标签**: 所有服务包含 `createdBy: "Apps"` 标签
 - **健康检查**: 所有服务配置了健康检查
-- **依赖服务**: 包含 PostgreSQL、Redis、Qdrant、MinIO
+- **依赖服务**: 包含 PostgreSQL、pgvector、Redis、MinIO
 - **无构建**: 不包含 build 配置，镜像需单独构建和管理
 
 ### 数据目录结构
@@ -164,9 +164,9 @@ cd deployment
 /data/cognee/
 ├── data/          # Cognee 应用数据
 ├── logs/          # 应用日志
-├── postgres/      # PostgreSQL 数据
+├── postgres/      # PostgreSQL 关系数据库数据
+├── pgvector/      # pgvector 向量数据库数据
 ├── redis/         # Redis 数据
-├── qdrant/        # Qdrant 向量数据库数据
 ├── minio/         # MinIO 对象存储数据
 ├── neo4j/         # Neo4j 图数据库数据
 │   ├── data/      # 数据库文件
@@ -183,9 +183,9 @@ cd deployment
 - **cognee**: 主应用服务，端口 8000
 - **cognee-mcp**: MCP 服务（可选），端口 8001
 - **frontend**: 前端服务（可选），端口 3000
-- **postgres**: PostgreSQL 数据库，端口 5432
+- **postgres**: PostgreSQL 关系数据库，端口 5432
+- **pgvector**: pgvector 向量数据库（独立的 PostgreSQL 实例），端口 5433
 - **redis**: Redis 缓存，端口 6379
-- **qdrant**: Qdrant 向量数据库，端口 6333/6334
 - **minio**: MinIO 对象存储，端口 9000/9001
 - **neo4j**: Neo4j 图数据库，端口 7474 (HTTP), 7687 (Bolt)
 - **redisinsight**: Redis Insight 管理工具，端口 5540
@@ -224,7 +224,42 @@ NEO4J_PASSWORD=pleaseletmein
 
 ### 向量数据库配置
 
-#### ChromaDB（默认）
+#### pgvector（推荐）
+
+pgvector 是 PostgreSQL 的向量扩展，将向量数据存储在 PostgreSQL 中。
+
+```env
+VECTOR_DB_PROVIDER=pgvector
+# 注意: pgvector 使用关系数据库的连接配置
+# 无需配置 VECTOR_DB_URL 和 VECTOR_DB_KEY
+```
+
+**配置说明**:
+- CozyCognee 配置了两个独立的 PostgreSQL 服务：
+  - `postgres`: 标准 PostgreSQL（端口 5432），用于关系数据
+  - `pgvector`: 带 pgvector 扩展（端口 5433），用于向量数据
+- 由于代码限制，pgvector 会使用关系数据库的配置
+- 详细配置请参考 [服务分离配置指南](./PGVECTOR_SEPARATION.md)
+
+**优势**:
+- 服务分离，便于独立扩展和管理
+- 向量数据和关系数据可以分离存储
+- 支持事务和 ACID 特性
+
+#### ChromaDB
+
+```env
+VECTOR_DB_PROVIDER=chroma
+VECTOR_DB_KEY=your-secret-token
+```
+
+#### Qdrant
+
+```env
+VECTOR_DB_PROVIDER=qdrant
+VECTOR_DB_URL=http://localhost:6333
+VECTOR_DB_KEY=  # 可选，用于 Qdrant Cloud
+```
 
 ```env
 VECTOR_DB_PROVIDER=chroma

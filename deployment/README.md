@@ -61,7 +61,7 @@ docker-compose up -d cognee
   - 使用外部网络 `1panel-network`
   - 所有数据存储在 `/data/cognee` 目录
   - 不包含 build 配置，镜像需单独构建
-  - 包含 PostgreSQL、Redis、Qdrant、MinIO 等依赖服务
+  - 包含 PostgreSQL（pgvector）、Redis、MinIO 等依赖服务
 
 ### 镜像构建
 

@@ -64,9 +64,11 @@ DATABASE_URL=postgresql://cognee_user:cognee_password@192.168.66.11:5432/cognee_
 REDIS_URL=redis://:cognee_redis_password@192.168.66.11:6379/0
 
 # ==================== 向量数据库配置 ====================
-# 连接到远程 Qdrant (192.168.66.11)
-VECTOR_DB_PROVIDER=qdrant
-QDRANT_URL=http://192.168.66.11:6333
+# 向量数据库配置（使用 pgvector，向量数据存储在 PostgreSQL 中）
+VECTOR_DB_PROVIDER=pgvector
+# 注意: pgvector 使用与 PostgreSQL 相同的连接配置
+# 无需配置 VECTOR_DB_URL 和 VECTOR_DB_KEY
+# pgvector 是 PostgreSQL 的扩展，已包含在 postgres extra 依赖中
 
 # ==================== 图数据库配置 ====================
 # 连接到远程 Neo4j (192.168.66.11)
@@ -120,8 +122,8 @@ psql -h 192.168.66.11 -U cognee_user -d cognee_db -c "SELECT 1;"
 # 测试 Redis 连接
 redis-cli -h 192.168.66.11 -p 6379 -a cognee_redis_password ping
 
-# 测试 Qdrant 连接
-curl http://192.168.66.11:6333/health
+# pgvector 是 PostgreSQL 的扩展，向量数据存储在 PostgreSQL 中
+# 无需单独测试，验证 PostgreSQL 连接即可
 
 # 测试 Neo4j 连接
 curl http://192.168.66.11:7474
@@ -187,7 +189,7 @@ docker logs -f cognee
    确保远程服务器的端口已开放：
    - 5432 (PostgreSQL)
    - 6379 (Redis)
-   - 6333 (Qdrant)
+   - pgvector 使用 PostgreSQL 端口 5432
    - 7687 (Neo4j Bolt)
    - 9000 (MinIO)
 
