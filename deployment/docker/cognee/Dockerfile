@@ -28,7 +28,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy pyproject.toml and lockfile first for better caching
-COPY ../../project/cognee/README.md ../../project/cognee/pyproject.toml ../../project/cognee/uv.lock ../../project/cognee/entrypoint.sh ./
+# 构建上下文是项目根目录，所以路径是 project/cognee/...
+COPY project/cognee/README.md project/cognee/pyproject.toml project/cognee/uv.lock project/cognee/entrypoint.sh ./
 
 # Install the project's dependencies using the lockfile and settings
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -38,13 +39,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # No additional adapter installation needed for pgvector
 
 # Copy Alembic configuration
-COPY ../../project/cognee/alembic.ini /app/alembic.ini
-COPY ../../project/cognee/alembic/ /app/alembic
+COPY project/cognee/alembic.ini /app/alembic.ini
+COPY project/cognee/alembic/ /app/alembic
 
 # Then, add the rest of the project source code and install it
 # Installing separately from its dependencies allows optimal layer caching
-COPY ../../project/cognee/cognee /app/cognee
-COPY ../../project/cognee/distributed /app/distributed
+COPY project/cognee/cognee /app/cognee
+COPY project/cognee/distributed /app/distributed
 RUN --mount=type=cache,target=/root/.cache/uv \
 uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --frozen --no-dev --no-editable
 

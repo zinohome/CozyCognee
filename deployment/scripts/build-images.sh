@@ -31,7 +31,8 @@ if [ ! -d "$PROJECT_ROOT/project/cognee" ]; then
     exit 1
 fi
 
-cd "$DEPLOYMENT_DIR"
+# 构建上下文应该是项目根目录，这样才能访问 project/cognee 目录
+cd "$PROJECT_ROOT"
 
 # 构建函数
 build_image() {
@@ -42,10 +43,11 @@ build_image() {
     
     echo -e "${YELLOW}📦 构建 $service 镜像...${NC}"
     echo "   镜像名称: $image_name:$version"
-    echo "   Dockerfile: $dockerfile"
+    echo "   Dockerfile: $DEPLOYMENT_DIR/$dockerfile"
+    echo "   构建上下文: $PROJECT_ROOT"
     
     docker build \
-        -f "$dockerfile" \
+        -f "$DEPLOYMENT_DIR/$dockerfile" \
         -t "$image_name:$version" \
         -t "$image_name:latest" \
         --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \

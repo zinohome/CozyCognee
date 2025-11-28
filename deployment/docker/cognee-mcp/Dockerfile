@@ -27,19 +27,20 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy pyproject.toml and lockfile first for better caching
-COPY ../../project/cognee/cognee-mcp/pyproject.toml ../../project/cognee/cognee-mcp/uv.lock ../../project/cognee/cognee-mcp/entrypoint.sh ./
+# 构建上下文是项目根目录，所以路径是 project/cognee/cognee-mcp/...
+COPY project/cognee/cognee-mcp/pyproject.toml project/cognee/cognee-mcp/uv.lock project/cognee/cognee-mcp/entrypoint.sh ./
 
 # Install the project's dependencies using the lockfile and settings
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev --no-editable
 
 # Copy Alembic configuration
-COPY ../../project/cognee/alembic.ini /app/alembic.ini
-COPY ../../project/cognee/alembic/ /app/alembic
+COPY project/cognee/alembic.ini /app/alembic.ini
+COPY project/cognee/alembic/ /app/alembic
 
 # Then, add the rest of the project source code and install it
 # Installing separately from its dependencies allows optimal layer caching
-COPY ../../project/cognee/cognee-mcp /app
+COPY project/cognee/cognee-mcp /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
