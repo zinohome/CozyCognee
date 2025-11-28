@@ -11,7 +11,20 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # 关系数据库配置 (标准 PostgreSQL - postgres 服务)
+      # ==================== 基础配置 ====================
+      - DEBUG=false
+      - ENVIRONMENT=production
+      - LOG_LEVEL=ERROR
+      - HOST=0.0.0.0
+      - HTTP_PORT=8000
+      - PYTHONUNBUFFERED=1
+      # ==================== LLM 配置 ====================
+      # 必需：配置您的LLM API密钥
+      - LLM_API_KEY=your-llm-api-key-here
+      - LLM_PROVIDER=openai  # 可选: openai, anthropic, groq, ollama, mistral
+      - LLM_MODEL=gpt-4o-mini  # 根据provider选择模型
+      # ==================== 数据库配置 ====================
+      # 关系型数据库配置 (标准 PostgreSQL - postgres 服务)
       - DATABASE_URL=postgresql://cognee_user:cognee_password@postgres:5432/cognee_db
       - DB_PROVIDER=postgres
       - DB_HOST=postgres
@@ -19,9 +32,8 @@ services:
       - DB_NAME=cognee_db
       - DB_USERNAME=cognee_user
       - DB_PASSWORD=cognee_password
-      # Redis 配置
-      - REDIS_URL=redis://:cognee_redis_password@redis:6379/0
-      # 向量数据库配置 (独立的 pgvector 服务)
+      # ==================== 向量数据库配置 ====================
+      # 使用 pgvector (独立的 pgvector 服务)
       # 注意: Cognee 的 pgvector 实现会从关系数据库配置获取连接信息
       # 当前配置：两个独立的 PostgreSQL 服务
       # - postgres: 标准 PostgreSQL，端口 5432，用于关系数据
@@ -31,24 +43,24 @@ services:
       # 要实现真正的服务分离，需要修改代码或使用环境变量覆盖
       # 详细说明请参考: docs/deployment/PGVECTOR_SEPARATION.md
       - VECTOR_DB_PROVIDER=pgvector
-      # 图数据库配置 (Neo4j)
-      - GRAPH_DATABASE_PROVIDER=neo4j
+      # 注意: 使用 pgvector 时，向量数据存储在 PostgreSQL 中，无需 VECTOR_DB_URL 和 VECTOR_DB_KEY
+      # 如果使用其他向量数据库，需要配置相应的 URL 和 KEY
+      # ==================== 图数据库配置 ====================
+      - GRAPH_DATABASE_PROVIDER=neo4j  # 可选: kuzu, neo4j
       - NEO4J_URL=bolt://neo4j:7687
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=pleaseletmein
-      # 对象存储配置 (MinIO/S3)
+      # ==================== Redis 配置 ====================
+      - REDIS_URL=redis://:cognee_redis_password@redis:6379/0
+      # ==================== 对象存储配置 (MinIO/S3) ====================
       - S3_ENDPOINT=http://minio:9000
       - S3_ACCESS_KEY=minioadmin
       - S3_SECRET_KEY=minioadmin
       - S3_BUCKET_NAME=cognee-storage
       - S3_USE_SSL=false
-      # 应用配置
-      - PYTHONUNBUFFERED=1
-      - ENVIRONMENT=production
-      - HTTP_PORT=8000
-      - HOST=0.0.0.0
-      - DEBUG=false
-      - LOG_LEVEL=ERROR
+      # ==================== 其他配置 ====================
+      # 可选依赖
+      - EXTRAS=api,postgres,neo4j
     depends_on:
       postgres:
         condition: service_healthy
