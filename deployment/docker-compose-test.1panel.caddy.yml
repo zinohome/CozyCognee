@@ -1,4 +1,4 @@
-# 1Panel Docker Compose 编排文件
+# 1Panel Docker Compose 编排文件 (Caddy 版本)
 # 适用于1Panel面板的Docker Compose配置
 # 注意：使用外部网络 1panel-network，所有数据存储在 /data/cognee 目录
 
@@ -232,37 +232,8 @@ services:
       timeout: 5s
       retries: 2
 
-  # Nginx 反向代理（统一后端服务，避免 CORS）
-  nginx:
-    image: nginx:alpine
-    container_name: cognee_nginx
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-    volumes:
-      - /data/cognee/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - /data/cognee/nginx/logs:/var/log/nginx
-    depends_on:
-      cognee:
-        condition: service_healthy
-      cognee-mcp-api:
-        condition: service_healthy
-      cognee-mcp-direct:
-        condition: service_healthy
-    networks:
-      - 1panel-network
-    labels:
-      createdBy: "Apps"
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   # Caddy 反向代理（统一后端服务，避免 CORS）
   # 注意：Caddy 自动处理 HTTPS 和 CORS，更简单易用
-  # 如果使用 Caddy，请注释掉上面的 nginx 服务，启用此服务
-  # 使用方法：取消下面的注释，并注释掉上面的 nginx 服务
   caddy:
     image: caddy:alpine
     container_name: cognee_caddy
@@ -300,8 +271,8 @@ services:
     environment:
       # 运行时环境变量（会覆盖构建时的默认值）
       # 注意：NEXT_PUBLIC_* 变量在开发模式下可以在运行时修改
-      # 使用 nginx 反向代理统一后端服务，避免 CORS 问题
-      # 所有 API 请求都通过 nginx:8080，由 nginx 路由到对应的后端服务
+      # 使用 Caddy 反向代理统一后端服务，避免 CORS 问题
+      # 所有 API 请求都通过 caddy:8080，由 caddy 路由到对应的后端服务
       - NEXT_PUBLIC_BACKEND_API_URL=http://192.168.66.11:8080/api
       # NEXT_PUBLIC_CLOUD_API_URL: 本地部署不需要 cloud API，留空或注释掉
       # - NEXT_PUBLIC_CLOUD_API_URL=http://192.168.66.11:8080/api
@@ -309,12 +280,8 @@ services:
       - NEXT_PUBLIC_COGWIT_API_KEY=
       - NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=false
     depends_on:
-      # 使用 nginx 时取消注释下面这行，注释掉 caddy
-      nginx:
+      caddy:
         condition: service_healthy
-      # 使用 caddy 时取消注释下面这行，注释掉 nginx
-      # caddy:
-      #   condition: service_healthy
     networks:
       - 1panel-network
     labels:

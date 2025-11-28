@@ -1,165 +1,487 @@
+# Docker Compose 编排文件
+# 适用于本地开发和测试环境
+# 注意：使用内部网络 cognee-network，数据存储在 Docker volumes
+
 services:
+  # Cognee 主应用服务
   cognee:
+    image: cognee:0.4.1
     container_name: cognee
-    networks:
-      - cognee-network
-    build:
-      context: .
-      dockerfile: docker/cognee/Dockerfile
-    volumes:
-      - ../project/cognee/cognee:/app/cognee
-      - ../project/cognee/distributed:/app/distributed
-      - .env:/app/.env
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
     environment:
-      - DEBUG=false # Change to true if debugging
+      # ==================== 基础配置 ====================
+      - DEBUG=false
+      - ENVIRONMENT=production
+      - LOG_LEVEL=DEBUG
       - HOST=0.0.0.0
-      - ENVIRONMENT=local
-      - LOG_LEVEL=ERROR
-    extra_hosts:
-      # Allows the container to reach your local machine using "host.docker.internal" instead of "localhost"
-      - "host.docker.internal:host-gateway"
-    ports:
-      - 8000:8000
-      - 5678:5678 # Debugger port
-    deploy:
-      resources:
-        limits:
-          cpus: "4.0"
-          memory: 8GB
-
-  # Cognee MCP Server - Model Context Protocol server for IDE integration
-  cognee-mcp:
-    container_name: cognee-mcp
-    profiles:
-      - mcp
-    networks:
-      - cognee-network
-    build:
-      context: .
-      dockerfile: docker/cognee-mcp/Dockerfile
-    volumes:
-      - .env:/app/.env
-    environment:
-      - DEBUG=false # Change to true if debugging
-      - ENVIRONMENT=local
-      - LOG_LEVEL=INFO
-      - TRANSPORT_MODE=sse
-      # Database configuration - should match the main cognee service
-      - DB_PROVIDER=${DB_PROVIDER:-sqlite}
-      - DB_HOST=${DB_HOST:-host.docker.internal}
-      - DB_PORT=${DB_PORT:-5432}
-      - DB_NAME=${DB_NAME:-cognee_db}
-      - DB_USERNAME=${DB_USERNAME:-cognee}
-      - DB_PASSWORD=${DB_PASSWORD:-cognee}
-      # MCP specific configuration
-      - MCP_LOG_LEVEL=INFO
+      - HTTP_PORT=8000
       - PYTHONUNBUFFERED=1
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8001:8000" # MCP port (changed to avoid conflict with cognee)
-      - "5679:5678" # MCP debugger port
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 4GB
-
-  # NOTE: Frontend is a work in progress and supports minimum amount of features required to be functional.
-  # If you want to use Cognee with a UI environment you can integrate the Cognee MCP Server into Cursor / Claude Desktop / Visual Studio Code (through Cline/Roo)
-  frontend:
-    container_name: cognee-frontend
-    profiles:
-        - ui
-    build:
-      context: .
-      dockerfile: docker/cognee-frontend/Dockerfile
+      # ==================== LLM 配置 ====================
+      # 必需：配置您的LLM API密钥
+      - LLM_API_KEY=your-llm-api-key-here
+      - LLM_PROVIDER=openai  # 可选: openai, anthropic, groq, ollama, mistral
+      - LLM_MODEL=gpt-4o-mini  # 根据provider选择模型
+      - LLM_ENDPOINT=https://oneapi.naivehero.top/v1
+      - LLM_MAX_TOKENS=16384
+      # EMBEDDING 配置（必需 - 请替换为您的实际密钥）
+      - EMBEDDING_PROVIDER=openai
+      - EMBEDDING_API_KEY=your-embedding-api-key-here
+      - EMBEDDING_ENDPOINT=https://oneapi.naivehero.top/v1
+      - EMBEDDING_MODEL=openai/text-embedding-3-large
+      - EMBEDDING_DIMENSIONS=3072
+      # ==================== 数据库配置 ====================
+      # 关系型数据库配置 (标准 PostgreSQL - postgres 服务)
+      - DATABASE_URL=postgresql://cognee_user:cognee_password@postgres:5432/cognee_db
+      - DB_PROVIDER=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=cognee_db
+      - DB_USERNAME=cognee_user
+      - DB_PASSWORD=cognee_password
+      # ==================== 向量数据库配置 ====================
+      # 使用 pgvector (独立的 pgvector 服务)
+      - VECTOR_DB_PROVIDER=pgvector
+      - VECTOR_DB_URL=postgresql://cognee_vector_user:cognee_vector_password@pgvector:5432/cognee_vector_db
+      # 如果使用其他向量数据库，需要配置相应的 URL 和 KEY
+      # ==================== 图数据库配置 ====================
+      - GRAPH_DATABASE_PROVIDER=neo4j  # 可选: kuzu, neo4j
+      - GRAPH_DATABASE_NAME=neo4j
+      - GRAPH_DATABASE_URL=bolt://neo4j:7687
+      - GRAPH_DATABASE_USERNAME=neo4j
+      - GRAPH_DATABASE_PASSWORD=pleaseletmein
+      # ==================== Redis 配置 ====================
+      - REDIS_URL=redis://:cognee_redis_password@redis:6379/0
+      # ==================== 对象存储配置 (MinIO/S3) ====================
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET_NAME=cognee-storage
+      - S3_USE_SSL=false
+      # ==================== CORS 配置 ====================
+      # 允许的跨域来源（逗号分隔）
+      # 如果不设置，默认只允许 UI_APP_URL（默认 http://localhost:3000）
+      - CORS_ALLOWED_ORIGINS=http://192.168.99.100:3000,http://192.168.66.11:3000,http://localhost:3000,http://127.0.0.1:3000,http://192.168.66.11:8000,http://localhost:8000,http://127.0.0.1:8000
+      # 或者允许所有来源（不推荐用于生产环境）
+      # - CORS_ALLOWED_ORIGINS=*
+      # ==================== 其他配置 ====================
+      # 可选依赖
+      - EXTRAS=api,postgres,neo4j
+      - TELEMETRY_DISABLED=1
+      - DEFAULT_USER_EMAIL=admin@cognee.com
+      - DEFAULT_USER_PASSWORD=passw0rd
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgvector:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
     volumes:
-      - ../project/cognee/cognee-frontend/src:/app/src
-      - ../project/cognee/cognee-frontend/public:/app/public
-    ports:
-      - 3000:3000
-      # - 9229:9229 # Debugging
+      - cognee_data:/app/data
+      - cognee_logs:/app/logs
     networks:
       - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      # 使用根路径 / 进行快速健康检查（比 /health 更快）
+      test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 2
+      start_period: 20s
 
+  # Cognee MCP 服务 - API Mode（轻量级，推荐）
+  # API Mode：连接到 cognee API 服务器，只需要 API_URL
+  # 使用镜像: cognee-mcp:api-0.4.1 (约 2-3GB，轻量级)
+  cognee-mcp-api:
+    image: cognee-mcp:api-0.4.1  # 使用轻量级 API Mode 镜像
+    container_name: cognee-mcp-api
+    restart: unless-stopped
+    # 注意：使用 nginx 反向代理后，不需要直接暴露端口
+    # ports:
+    #   - "8001:8000"
+    environment:
+      # ==================== 基础配置 ====================
+      - DEBUG=false
+      - ENVIRONMENT=production
+      - PYTHONUNBUFFERED=1
+      # ==================== MCP 配置 ====================
+      - TRANSPORT_MODE=sse  # 可选: stdio, sse, http
+      - MCP_LOG_LEVEL=INFO
+      # ==================== API Mode 配置 ====================
+      # API Mode 下只需要配置 API URL，不需要 LLM、数据库等配置
+      - API_URL=http://cognee:8000
+      # - API_TOKEN=your-api-token  # 如果 API 启用了认证，取消注释并设置
+      # ==================== CORS 配置 ====================
+      # 注意：使用 nginx 反向代理后，所有请求都来自同一个源，不需要 CORS 配置
+      # 但为了兼容直接访问的情况，仍然保留配置
+      - CORS_ALLOWED_ORIGINS=http://192.168.99.100:3000,http://192.168.66.11:3000,http://localhost:3000,http://127.0.0.1:3000,http://192.168.66.11:8080,http://localhost:8080,http://127.0.0.1:8080
+      # 或者允许所有来源（不推荐用于生产环境）
+      # - CORS_ALLOWED_ORIGINS=*
+    depends_on:
+      cognee:
+        condition: service_healthy
+      # API Mode 下不需要直接依赖 postgres（通过 cognee API 访问）
+    volumes:
+      - cognee_mcp_api_data:/app/data
+    networks:
+      - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      # 使用根路径 / 进行快速健康检查（比 /health 更快）
+      test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 2
+
+  # Cognee MCP 服务 - Direct Mode（完整功能）
+  # Direct Mode：直接使用 cognee 库，需要所有 cognee 的环境变量
+  # 使用镜像: cognee-mcp:0.4.1 (约 1.5-2GB，包含完整依赖)
+  cognee-mcp-direct:
+    image: cognee-mcp:0.4.1  # 使用 Direct Mode 镜像
+    container_name: cognee-mcp-direct
+    restart: unless-stopped
+    # 注意：使用 nginx 反向代理后，不需要直接暴露端口
+    # ports:
+    #   - "8002:8000"
+    environment:
+      # ==================== 基础配置 ====================
+      - DEBUG=false
+      - ENVIRONMENT=production
+      - LOG_LEVEL=ERROR
+      - PYTHONUNBUFFERED=1
+      # ==================== MCP 配置 ====================
+      - TRANSPORT_MODE=sse  # 可选: stdio, sse, http
+      - MCP_LOG_LEVEL=INFO
+      # ==================== Direct Mode 配置 ====================
+      # Direct Mode 下需要所有 cognee 的环境变量
+      # ==================== LLM 配置 ====================
+      - LLM_API_KEY=your-llm-api-key-here
+      - LLM_PROVIDER=openai  # 可选: openai, anthropic, groq, ollama, mistral
+      - LLM_MODEL=gpt-4o-mini  # 根据provider选择模型
+      - LLM_ENDPOINT=https://oneapi.naivehero.top/v1
+      - LLM_MAX_TOKENS=16384
+      # EMBEDDING 配置（必需 - 请替换为您的实际密钥）
+      - EMBEDDING_PROVIDER=openai
+      - EMBEDDING_API_KEY=your-embedding-api-key-here
+      - EMBEDDING_ENDPOINT=https://oneapi.naivehero.top/v1
+      - EMBEDDING_MODEL=openai/text-embedding-3-large
+      - EMBEDDING_DIMENSIONS=3072
+      # ==================== 数据库配置 ====================
+      - DATABASE_URL=postgresql://cognee_user:cognee_password@postgres:5432/cognee_db
+      - DB_PROVIDER=postgres
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=cognee_db
+      - DB_USERNAME=cognee_user
+      - DB_PASSWORD=cognee_password
+      # ==================== 向量数据库配置 ====================
+      - VECTOR_DB_PROVIDER=pgvector
+      - VECTOR_DB_URL=postgresql://cognee_vector_user:cognee_vector_password@pgvector:5432/cognee_vector_db
+      # ==================== 图数据库配置 ====================
+      - GRAPH_DATABASE_PROVIDER=neo4j
+      - GRAPH_DATABASE_NAME=neo4j
+      - GRAPH_DATABASE_URL=bolt://neo4j:7687
+      - GRAPH_DATABASE_USERNAME=neo4j
+      - GRAPH_DATABASE_PASSWORD=pleaseletmein
+      # ==================== Redis 配置 ====================
+      - REDIS_URL=redis://:cognee_redis_password@redis:6379/0
+      # ==================== 对象存储配置 (MinIO/S3) ====================
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET_NAME=cognee-storage
+      - S3_USE_SSL=false
+      # ==================== CORS 配置 ====================
+      # 注意：使用 nginx 反向代理后，所有请求都来自同一个源，不需要 CORS 配置
+      # 但为了兼容直接访问的情况，仍然保留配置
+      - CORS_ALLOWED_ORIGINS=http://192.168.99.100:3000,http://192.168.66.11:3000,http://localhost:3000,http://127.0.0.1:3000,http://192.168.66.11:8080,http://localhost:8080,http://127.0.0.1:8080
+      # 或者允许所有来源（不推荐用于生产环境）
+      # - CORS_ALLOWED_ORIGINS=*
+      # ==================== 其他配置 ====================
+      - EXTRAS=api,postgres,neo4j
+      - TELEMETRY_DISABLED=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgvector:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    volumes:
+      - cognee_mcp_direct_data:/app/data
+    networks:
+      - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      # 使用根路径 / 进行快速健康检查（比 /health 更快）
+      test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 2
+
+  # Nginx 反向代理（统一后端服务，避免 CORS）
+  nginx:
+    image: nginx:alpine
+    container_name: cognee_nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - /data/cognee/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - cognee_nginx_logs:/var/log/nginx
+    depends_on:
+      cognee:
+        condition: service_healthy
+      cognee-mcp-api:
+        condition: service_healthy
+      cognee-mcp-direct:
+        condition: service_healthy
+    networks:
+      - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Caddy 反向代理（统一后端服务，避免 CORS）
+  # 注意：Caddy 自动处理 HTTPS 和 CORS，更简单易用
+  # 如果使用 Caddy，请注释掉上面的 nginx 服务，启用此服务
+  # 使用方法：取消下面的注释，并注释掉上面的 nginx 服务
+  caddy:
+    image: caddy:alpine
+    container_name: cognee_caddy
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /data/cognee/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - cognee_caddy_data:/data
+      - cognee_caddy_config:/config
+    depends_on:
+      cognee:
+        condition: service_healthy
+      cognee-mcp-api:
+        condition: service_healthy
+      cognee-mcp-direct:
+        condition: service_healthy
+    networks:
+      - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Cognee 前端服务（可选）
+  frontend:
+    image: cognee-frontend:0.4.1
+    container_name: cognee-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # 运行时环境变量（会覆盖构建时的默认值）
+      # 注意：NEXT_PUBLIC_* 变量在开发模式下可以在运行时修改
+      # 使用 nginx 反向代理统一后端服务，避免 CORS 问题
+      # 所有 API 请求都通过 nginx:8080，由 nginx 路由到对应的后端服务
+      - NEXT_PUBLIC_BACKEND_API_URL=http://192.168.66.11:8080/api
+      # NEXT_PUBLIC_CLOUD_API_URL: 本地部署不需要 cloud API，留空或注释掉
+      # - NEXT_PUBLIC_CLOUD_API_URL=http://192.168.66.11:8080/api
+      - NEXT_PUBLIC_MCP_API_URL=http://192.168.66.11:8080/mcp-api
+      - NEXT_PUBLIC_COGWIT_API_KEY=
+      - NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=false
+    depends_on:
+      # 使用 nginx 时取消注释下面这行，注释掉 caddy
+      nginx:
+        condition: service_healthy
+      # 使用 caddy 时取消注释下面这行，注释掉 nginx
+      # caddy:
+      #   condition: service_healthy
+    networks:
+      - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL 关系数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: cognee_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=cognee_user
+      - POSTGRES_PASSWORD=cognee_password
+      - POSTGRES_DB=cognee_db
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognee_user -d cognee_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # pgvector 向量数据库（独立的 PostgreSQL 实例，带 pgvector 扩展）
+  pgvector:
+    image: pgvector/pgvector:0.8.1-pg17-trixie
+    container_name: cognee_pgvector
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=cognee_vector_user
+      - POSTGRES_PASSWORD=cognee_vector_password
+      - POSTGRES_DB=cognee_vector_db
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    networks:
+      - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognee_vector_user -d cognee_vector_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存和消息队列
+  redis:
+    image: redis:7-alpine
+    container_name: cognee_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass cognee_redis_password
+    environment:
+      - REDIS_PASSWORD=cognee_redis_password
+    volumes:
+      - redis_data:/data
+    networks:
+      - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "cognee_redis_password", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # MinIO 对象存储 (S3 兼容)
+  # 使用 cpuv1 版本以兼容不支持 x86-64-v2 的旧 CPU
+  minio:
+    image: quay.io/minio/minio:RELEASE.2023-11-01T01-57-10Z-cpuv1
+    container_name: cognee_minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    networks:
+      - cognee-network
+    labels:
+      createdBy: "Docker Compose"
+    # MinIO 容器可能没有 ps/grep 等工具，使用 service_started 代替健康检查
+    # 如果需要健康检查，可以安装 curl 或使用其他方法
+
+  # Neo4j 图数据库
   neo4j:
     image: neo4j:latest
-    container_name: neo4j
-    profiles:
-      - neo4j
+    container_name: cognee_neo4j
+    restart: unless-stopped
     ports:
-      - 7474:7474
-      - 7687:7687
+      - "7474:7474"
+      - "7687:7687"
     environment:
       - NEO4J_AUTH=neo4j/pleaseletmein
       - NEO4J_PLUGINS=["apoc", "graph-data-science"]
-    networks:
-      - cognee-network
-
-  chromadb:
-    image: chromadb/chroma:0.6.3
-    container_name: chromadb
-    profiles:
-      - chromadb
-    environment:
-      - IS_PERSISTENT=TRUE
-      - CHROMA_SERVER_AUTH_CREDENTIALS=${VECTOR_DB_KEY}
-      - CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER=chromadb.auth.token.TokenConfigServerAuthCredentialsProvider
-      - CHROMA_SERVER_AUTH_TOKEN_TRANSPORT_HEADER=AUTHORIZATION
-      - CHROMA_SERVER_AUTH_PROVIDER=chromadb.auth.token.TokenAuthServerProvider
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=2G
     volumes:
-      - chromadb_data:/chroma/chroma/
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
     networks:
       - cognee-network
-    ports:
-      - "3002:8000"
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "pleaseletmein", "RETURN 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  postgres:
-    image: pgvector/pgvector:0.8.1-pg17-trixie
-    container_name: postgres
-    profiles:
-      - postgres
-    environment:
-      POSTGRES_USER: cognee
-      POSTGRES_PASSWORD: cognee
-      POSTGRES_DB: cognee_db
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - 5432:5432
-    networks:
-      - cognee-network
-
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-    profiles:
-      - redis
-    ports:
-      - "6379:6379"
-    networks:
-      - cognee-network
-    volumes:
-      - redis_data:/data
-    command: [ "redis-server", "--appendonly", "yes" ]
-
+  # Redis Insight 管理工具
   redisinsight:
     image: redislabs/redisinsight:latest
-    container_name: redisinsight
-    restart: always
+    container_name: cognee_redisinsight
+    restart: unless-stopped
+    user: "0:0"  # 以 root 用户运行
     ports:
       - "5540:5540"
+    volumes:
+      - redisinsight_data:/data
     networks:
       - cognee-network
-
+    labels:
+      createdBy: "Docker Compose"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5540"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # Redis Insight 可以通过 Web UI 连接到 redis 服务
+    # 连接信息: redis://:cognee_redis_password@redis:6379/0
 
 networks:
   cognee-network:
     name: cognee-network
 
 volumes:
-  chromadb_data:
+  cognee_data:
+  cognee_logs:
+  cognee_mcp_api_data:
+  cognee_mcp_direct_data:
+  cognee_nginx_logs:
+  cognee_caddy_data:
+  cognee_caddy_config:
   postgres_data:
+  pgvector_data:
   redis_data:
-
+  minio_data:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
+  redisinsight_data:

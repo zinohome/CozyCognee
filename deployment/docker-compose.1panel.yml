@@ -5,7 +5,7 @@
 services:
   # Cognee 主应用服务
   cognee:
-    image: cognee:latest
+    image: cognee:0.4.1
     container_name: cognee
     restart: unless-stopped
     ports:
@@ -91,21 +91,20 @@ services:
     labels:
       createdBy: "Apps"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # 使用根路径 / 进行快速健康检查（比 /health 更快）
+      test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8000/"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      timeout: 5s
+      retries: 2
+      start_period: 20s
 
   # Cognee MCP 服务 - API Mode（轻量级，推荐）
   # API Mode：连接到 cognee API 服务器，只需要 API_URL
   # 使用镜像: cognee-mcp:api-latest (约 2-3GB，轻量级)
   cognee-mcp-api:
-    image: cognee-mcp:api-latest  # 使用轻量级 API Mode 镜像
+    image: cognee-mcp:api-0.4.1  # 使用轻量级 API Mode 镜像
     container_name: cognee-mcp-api
     restart: unless-stopped
-    profiles:
-      - mcp
     # 注意：使用 nginx 反向代理后，不需要直接暴露端口
     # ports:
     #   - "8001:8000"
@@ -138,20 +137,19 @@ services:
     labels:
       createdBy: "Apps"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # 使用根路径 / 进行快速健康检查（比 /health 更快）
+      test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8000/"]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 5s
+      retries: 2
 
   # Cognee MCP 服务 - Direct Mode（完整功能）
   # Direct Mode：直接使用 cognee 库，需要所有 cognee 的环境变量
   # 使用镜像: cognee-mcp:latest (约 1.5-2GB，包含完整依赖)
   cognee-mcp-direct:
-    image: cognee-mcp:latest  # 使用 Direct Mode 镜像
+    image: cognee-mcp:0.4.1  # 使用 Direct Mode 镜像
     container_name: cognee-mcp-direct
     restart: unless-stopped
-    profiles:
-      - mcp
     # 注意：使用 nginx 反向代理后，不需要直接暴露端口
     # ports:
     #   - "8002:8000"
@@ -228,10 +226,11 @@ services:
     labels:
       createdBy: "Apps"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      # 使用根路径 / 进行快速健康检查（比 /health 更快）
+      test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8000/"]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 5s
+      retries: 2
 
   # Nginx 反向代理（统一后端服务，避免 CORS）
   nginx:
@@ -241,7 +240,7 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /data/cognee/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - /data/cognee/nginx/logs:/var/log/nginx
     depends_on:
       cognee:
@@ -260,13 +259,42 @@ services:
       timeout: 10s
       retries: 3
 
+  # Caddy 反向代理（统一后端服务，避免 CORS）
+  # 注意：Caddy 自动处理 HTTPS 和 CORS，更简单易用
+  # 如果使用 Caddy，请注释掉上面的 nginx 服务，启用此服务
+  # 使用方法：取消下面的注释，并注释掉上面的 nginx 服务
+  caddy:
+    image: caddy:alpine
+    container_name: cognee_caddy
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /data/cognee/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /data/cognee/caddy/data:/data
+      - /data/cognee/caddy/config:/config
+    depends_on:
+      cognee:
+        condition: service_healthy
+      cognee-mcp-api:
+        condition: service_healthy
+      cognee-mcp-direct:
+        condition: service_healthy
+    networks:
+      - 1panel-network
+    labels:
+      createdBy: "Apps"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # Cognee 前端服务（可选）
   frontend:
-    image: cognee-frontend:latest
+    image: cognee-frontend:0.4.1
     container_name: cognee-frontend
     restart: unless-stopped
-    profiles:
-      - ui
     ports:
       - "3000:3000"
     environment:
@@ -281,8 +309,12 @@ services:
       - NEXT_PUBLIC_COGWIT_API_KEY=
       - NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=false
     depends_on:
+      # 使用 nginx 时取消注释下面这行，注释掉 caddy
       nginx:
         condition: service_healthy
+      # 使用 caddy 时取消注释下面这行，注释掉 nginx
+      # caddy:
+      #   condition: service_healthy
     networks:
       - 1panel-network
     labels:

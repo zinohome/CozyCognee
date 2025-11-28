@@ -9,6 +9,32 @@ request_body {
     max_size 100MB
 }
 
+# ==================== CORS 配置 ====================
+# 统一添加 CORS 头，允许前端跨域访问
+# 注意：如果前端和后端都通过同一个反向代理访问（相同端口），则不需要 CORS
+# 但如果前端在 3000 端口，API 在 8080 端口，则需要 CORS 头
+# 处理 OPTIONS 预检请求
+@options {
+    method OPTIONS
+}
+handle @options {
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
+    respond 204
+}
+
+# 为所有响应添加 CORS 头（除了 OPTIONS 请求）
+header {
+    Access-Control-Allow-Origin "*"
+    Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+    Access-Control-Allow-Credentials "true"
+}
+
 # ==================== Cognee 主 API ====================
 # 路径: /api/* -> cognee:8000/api/*
 handle /api/* {
@@ -36,8 +62,8 @@ handle /health {
 }
 
 # ==================== Cognee MCP API Mode ====================
-# 路径: /mcp-api/* -> cognee-mcp-api:8000/*
-handle /mcp-api/* {
+# 路径: /mcp-api/* -> cognee-mcp-api:8000/* (去除 /mcp-api/ 前缀)
+handle_path /mcp-api/* {
     reverse_proxy cognee-mcp-api:8000 {
         header_up Host {host}
         header_up X-Real-IP {remote}
@@ -56,14 +82,15 @@ handle /mcp-api/* {
     }
 }
 
-# MCP API 健康检查
+# MCP API 健康检查（去除 /mcp-api/ 前缀）
 handle /mcp-api/health {
+    rewrite * /health
     reverse_proxy cognee-mcp-api:8000
 }
 
 # ==================== Cognee MCP Direct Mode ====================
-# 路径: /mcp-direct/* -> cognee-mcp-direct:8000/*
-handle /mcp-direct/* {
+# 路径: /mcp-direct/* -> cognee-mcp-direct:8000/* (去除 /mcp-direct/ 前缀)
+handle_path /mcp-direct/* {
     reverse_proxy cognee-mcp-direct:8000 {
         header_up Host {host}
         header_up X-Real-IP {remote}
@@ -82,8 +109,9 @@ handle /mcp-direct/* {
     }
 }
 
-# MCP Direct 健康检查
+# MCP Direct 健康检查（去除 /mcp-direct/ 前缀）
 handle /mcp-direct/health {
+    rewrite * /health
     reverse_proxy cognee-mcp-direct:8000
 }
 
