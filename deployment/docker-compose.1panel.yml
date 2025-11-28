@@ -23,6 +23,8 @@ services:
       - LLM_API_KEY=your-llm-api-key-here
       - LLM_PROVIDER=openai  # 可选: openai, anthropic, groq, ollama, mistral
       - LLM_MODEL=gpt-4o-mini  # 根据provider选择模型
+      - LLM_ENDPOINT=https://oneapi.naivehero.top/v1
+      - LLM_MAX_TOKENS=16384
       # ==================== 数据库配置 ====================
       # 关系型数据库配置 (标准 PostgreSQL - postgres 服务)
       - DATABASE_URL=postgresql://cognee_user:cognee_password@postgres:5432/cognee_db
@@ -34,16 +36,10 @@ services:
       - DB_PASSWORD=cognee_password
       # ==================== 向量数据库配置 ====================
       # 使用 pgvector (独立的 pgvector 服务)
-      # 注意: Cognee 的 pgvector 实现会从关系数据库配置获取连接信息
-      # 当前配置：两个独立的 PostgreSQL 服务
-      # - postgres: 标准 PostgreSQL，端口 5432，用于关系数据
-      # - pgvector: 带 pgvector 扩展，端口 5433，用于向量数据
-      # 
-      # 由于代码限制，pgvector 会使用关系数据库的配置（连接到 postgres 服务）
-      # 要实现真正的服务分离，需要修改代码或使用环境变量覆盖
-      # 详细说明请参考: docs/deployment/PGVECTOR_SEPARATION.md
-      - VECTOR_DB_PROVIDER=pgvector
-      # 注意: 使用 pgvector 时，向量数据存储在 PostgreSQL 中，无需 VECTOR_DB_URL 和 VECTOR_DB_KEY
+      - GRAPH_DATABASE_PROVIDER="pgvector"
+      - GRAPH_DATABASE_URL=postgresql://cognee_vector_user:cognee_vector_password@192.168.66.11:5433/cognee_vector_db
+      - GRAPH_DATABASE_USERNAME=cognee_vector_user
+      - GRAPH_DATABASE_PASSWORD=cognee_vector_password
       # 如果使用其他向量数据库，需要配置相应的 URL 和 KEY
       # ==================== 图数据库配置 ====================
       - GRAPH_DATABASE_PROVIDER=neo4j  # 可选: kuzu, neo4j
@@ -61,6 +57,9 @@ services:
       # ==================== 其他配置 ====================
       # 可选依赖
       - EXTRAS=api,postgres,neo4j
+      - TELEMETRY_DISABLED=1
+      - DEFAULT_USER_EMAIL=admin@cognee.com
+      - DEFAULT_USER_PASSWORD=passw0rd
     depends_on:
       postgres:
         condition: service_healthy
