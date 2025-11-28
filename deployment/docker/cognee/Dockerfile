@@ -59,7 +59,8 @@ uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-i
 # Install playwright browsers (消除警告)
 # 注意：这会增加镜像大小（约 200MB），如果不需要 web scraping 功能可以注释掉
 # 在构建阶段安装，因为这里有完整的系统依赖
-RUN python3 -m playwright install --with-deps chromium 2>/dev/null || echo "Playwright browsers installation skipped (optional)"
+# 安装到 /app/.cache 以便在最终阶段一起复制
+RUN PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright python3 -m playwright install --with-deps chromium 2>/dev/null || echo "Playwright browsers installation skipped (optional)"
 
 # Note: pgvector support is included via postgres extra dependencies
 
@@ -87,8 +88,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY --from=uv /app /app
-# Copy playwright browsers if installed
-COPY --from=uv /root/.cache/ms-playwright /root/.cache/ms-playwright 2>/dev/null || true
+# playwright 浏览器已经通过 COPY --from=uv /app /app 一起复制过来了（在 /app/.cache/ms-playwright）
+# 如果需要移动到 /root/.cache，可以在这里处理，但通常不需要，因为 playwright 会查找环境变量
+# 设置环境变量指向 playwright 浏览器位置
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright
 # COPY --from=uv /app/.venv /app/.venv
 # COPY --from=uv /root/.local /root/.local
 
