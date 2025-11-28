@@ -2,7 +2,7 @@
 name = "cognee-mcp-api"
 version = "0.4.0"
 description = "Cognee MCP server - API Mode (Lightweight)"
-readme = "README.md"
+# 注意：不包含 readme 字段，因为这是构建时使用的临时配置文件
 requires-python = ">=3.10"
 
 # API Mode 下的最小依赖
