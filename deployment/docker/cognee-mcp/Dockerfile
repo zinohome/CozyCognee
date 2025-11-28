@@ -26,21 +26,36 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy pyproject.toml and lockfile first for better caching
-# 构建上下文是项目根目录，所以路径是 project/cognee/cognee-mcp/...
+# 优化：使用源代码而不是 PyPI 包，大幅减小镜像体积（从 8.5GB 减少到 ~1.5-2GB）
+# 参考 cognee Dockerfile 的构建方式，避免从 PyPI 安装包含 docs extra 的完整包
+# 
+# 关键优化：
+# 1. 先复制 cognee 源代码，然后修改 pyproject.toml 使用本地路径
+# 2. 移除 docs extra（unstructured 包占用 3-5GB）
+# 3. 只安装必要的 extras（postgres, neo4j）
+
+# 1. 先复制 cognee 源代码（必须在修改 pyproject.toml 之前）
+COPY project/cognee/cognee /app/cognee
+COPY project/cognee/distributed /app/distributed
+COPY project/cognee/pyproject.toml /app/cognee-pyproject.toml
+
+# 2. 复制 cognee-mcp 的依赖文件
 COPY project/cognee/cognee-mcp/pyproject.toml project/cognee/cognee-mcp/uv.lock project/cognee/cognee-mcp/entrypoint.sh ./
 
-# Install the project's dependencies using the lockfile and settings
+# 3. 修改 pyproject.toml：使用本地 cognee 源代码，移除 docs extra
+# 这样可以避免从 PyPI 安装包含 unstructured 的完整包
+RUN sed -i 's|"cognee\[postgres,docs,neo4j\]==0.3.7"|"cognee[postgres,neo4j] @ file:///app"|' pyproject.toml
+
+# 4. 安装依赖（使用本地 cognee 源代码，不包含 docs extra）
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev --no-editable
 
-# Copy Alembic configuration
+# 5. 复制 Alembic 配置（如果需要数据库迁移）
 COPY project/cognee/alembic.ini /app/alembic.ini
 COPY project/cognee/alembic/ /app/alembic
 
-# Then, add the rest of the project source code and install it
-# Installing separately from its dependencies allows optimal layer caching
-COPY project/cognee/cognee-mcp /app
+# 6. 复制 cognee-mcp 源代码并安装项目
+COPY project/cognee/cognee-mcp/src /app/src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 
