@@ -40,20 +40,32 @@ build_image() {
     local dockerfile=$2
     local image_name=$3
     local version=$4
+    local tag_latest=${5:-true}  # 默认打 latest 标签，API Mode 设为 false
     
     echo -e "${YELLOW}📦 构建 $service 镜像...${NC}"
     echo "   镜像名称: $image_name:$version"
     echo "   Dockerfile: $DEPLOYMENT_DIR/$dockerfile"
     echo "   构建上下文: $PROJECT_ROOT"
     
-    docker build \
-        -f "$DEPLOYMENT_DIR/$dockerfile" \
-        -t "$image_name:$version" \
-        -t "$image_name:latest" \
-        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --label "org.opencontainers.image.version=$version" \
-        --label "org.opencontainers.image.revision=$(git rev-parse HEAD 2>/dev/null || echo 'unknown')" \
-        .
+    # 构建基础参数
+    local build_args=(
+        -f "$DEPLOYMENT_DIR/$dockerfile"
+        -t "$image_name:$version"
+        --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        --label "org.opencontainers.image.version=$version"
+        --label "org.opencontainers.image.revision=$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+    )
+    
+    # 如果需要打 latest 标签
+    if [ "$tag_latest" = "true" ]; then
+        build_args+=(-t "$image_name:latest")
+    fi
+    
+    # 添加构建上下文
+    build_args+=(.)
+    
+    # 执行构建
+    docker build "${build_args[@]}"
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ $service 镜像构建成功${NC}"
@@ -80,17 +92,26 @@ build_image "Cognee Frontend" \
     "cognee-frontend" \
     "$VERSION"
 
-# 3. Cognee MCP
-build_image "Cognee MCP" \
+# 3. Cognee MCP (Direct Mode)
+build_image "Cognee MCP (Direct Mode)" \
     "docker/cognee-mcp/Dockerfile" \
     "cognee-mcp" \
     "$VERSION"
+
+# 4. Cognee MCP (API Mode - 轻量级)
+# 注意：API Mode 不打 latest 标签，latest 应该指向 Direct Mode
+API_VERSION="api-${VERSION}"
+build_image "Cognee MCP (API Mode)" \
+    "docker/cognee-mcp/Dockerfile.api" \
+    "cognee-mcp" \
+    "$API_VERSION" \
+    "false"
 
 # 显示构建结果
 echo -e "${GREEN}🎉 所有镜像构建完成！${NC}"
 echo ""
 echo "构建的镜像:"
-docker images | grep -E "cognee|cognee-frontend|cognee-mcp" | grep -E "$VERSION|latest" || true
+docker images | grep -E "cognee|cognee-frontend|cognee-mcp" | grep -E "$VERSION|api-${VERSION}|latest" || true
 echo ""
 
 # 询问是否推送到镜像仓库
@@ -103,13 +124,25 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "推送镜像到 $REGISTRY..."
         
         # 推送镜像
-        for image in cognee cognee-frontend cognee-mcp; do
+        for image in cognee cognee-frontend; do
             echo "推送 $image:$VERSION..."
             docker tag "$image:$VERSION" "$REGISTRY/$image:$VERSION"
             docker tag "$image:latest" "$REGISTRY/$image:latest"
             docker push "$REGISTRY/$image:$VERSION"
             docker push "$REGISTRY/$image:latest"
         done
+        
+        # 推送 cognee-mcp (Direct Mode)
+        echo "推送 cognee-mcp:$VERSION (Direct Mode)..."
+        docker tag "cognee-mcp:$VERSION" "$REGISTRY/cognee-mcp:$VERSION"
+        docker tag "cognee-mcp:latest" "$REGISTRY/cognee-mcp:latest"
+        docker push "$REGISTRY/cognee-mcp:$VERSION"
+        docker push "$REGISTRY/cognee-mcp:latest"
+        
+        # 推送 cognee-mcp (API Mode)
+        echo "推送 cognee-mcp:$API_VERSION (API Mode)..."
+        docker tag "cognee-mcp:$API_VERSION" "$REGISTRY/cognee-mcp:$API_VERSION"
+        docker push "$REGISTRY/cognee-mcp:$API_VERSION"
         
         echo -e "${GREEN}✅ 镜像推送完成${NC}"
     else
