@@ -42,8 +42,9 @@ COPY project/cognee/pyproject.toml /app/cognee-source/pyproject.toml
 COPY project/cognee/cognee /app/cognee-source/cognee
 COPY project/cognee/distributed /app/cognee-source/distributed
 
-# 2. 复制 cognee-mcp 的依赖文件
+# 2. 复制 cognee-mcp 的依赖文件（包括 README.md，因为 pyproject.toml 中声明了 readme = "README.md"）
 COPY project/cognee/cognee-mcp/pyproject.toml project/cognee/cognee-mcp/uv.lock project/cognee/cognee-mcp/entrypoint.sh ./
+COPY project/cognee/cognee-mcp/README.md ./README.md
 
 # 3. 修改 pyproject.toml：使用本地 cognee 源代码，移除 docs extra，添加 scraping extra
 # 使用 file:///app/cognee-source 指向 cognee 源代码目录
