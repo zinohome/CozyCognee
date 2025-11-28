@@ -32,8 +32,9 @@ RUN apt-get update && apt-get install -y \
 COPY project/cognee/README.md project/cognee/pyproject.toml project/cognee/uv.lock project/cognee/entrypoint.sh ./
 
 # Install the project's dependencies using the lockfile and settings
+# 添加 scraping extra 以安装 protego 和 playwright（消除警告）
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --frozen --no-install-project --no-dev --no-editable
+    uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --extra scraping --frozen --no-install-project --no-dev --no-editable
 
 # Note: pgvector is included in the postgres extra dependencies
 # No additional adapter installation needed for pgvector
@@ -53,7 +54,12 @@ COPY deployment/docker/cognee/patch_cors.py /tmp/patch_cors.py
 RUN python3 /tmp/patch_cors.py /app/cognee/api/client.py && rm /tmp/patch_cors.py
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --frozen --no-dev --no-editable
+uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --extra scraping --frozen --no-dev --no-editable
+
+# Install playwright browsers (消除警告)
+# 注意：这会增加镜像大小（约 200MB），如果不需要 web scraping 功能可以注释掉
+# 在构建阶段安装，因为这里有完整的系统依赖
+RUN python3 -m playwright install --with-deps chromium 2>/dev/null || echo "Playwright browsers installation skipped (optional)"
 
 # Note: pgvector support is included via postgres extra dependencies
 
@@ -61,11 +67,28 @@ FROM python:3.12-slim-bookworm
 
 RUN apt-get update && apt-get install -y \
     libpq5 \
+    # playwright 浏览器运行时依赖
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY --from=uv /app /app
+# Copy playwright browsers if installed
+COPY --from=uv /root/.cache/ms-playwright /root/.cache/ms-playwright 2>/dev/null || true
 # COPY --from=uv /app/.venv /app/.venv
 # COPY --from=uv /root/.local /root/.local
 

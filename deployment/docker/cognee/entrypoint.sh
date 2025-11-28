@@ -51,6 +51,19 @@ if [ "$ENVIRONMENT" = "dev" ] || [ "$ENVIRONMENT" = "local" ]; then
         gunicorn -w 1 -k uvicorn.workers.UvicornWorker -t 30000 --bind=0.0.0.0:$HTTP_PORT --log-level debug --reload cognee.api.client:app
     fi
 else
-    gunicorn -w 1 -k uvicorn.workers.UvicornWorker -t 30000 --bind=0.0.0.0:$HTTP_PORT --log-level error cognee.api.client:app
+    # 生产环境：增加 worker 超时时间，添加 max_requests 防止内存泄漏
+    # --max-requests: 每个 worker 处理请求数后重启，防止内存泄漏
+    # --max-requests-jitter: 随机化重启，避免所有 worker 同时重启
+    # --timeout: 增加超时时间，避免长时间操作导致 worker 被杀死
+    gunicorn -w 1 -k uvicorn.workers.UvicornWorker \
+        --timeout 300 \
+        --graceful-timeout 30 \
+        --max-requests 1000 \
+        --max-requests-jitter 100 \
+        --bind=0.0.0.0:$HTTP_PORT \
+        --log-level error \
+        --access-logfile - \
+        --error-logfile - \
+        cognee.api.client:app
 fi
 
