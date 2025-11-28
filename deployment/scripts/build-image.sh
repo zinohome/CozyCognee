@@ -24,7 +24,7 @@ NC='\033[0m' # No Color
 if [ -z "$SERVICE" ]; then
     echo -e "${RED}❌ 错误: 请指定服务名称${NC}"
     echo "用法: $0 <service> [version]"
-    echo "服务: cognee, cognee-frontend, cognee-mcp"
+    echo "服务: cognee, cognee-frontend, cognee-mcp, cognee-mcp-api"
     exit 1
 fi
 
@@ -42,9 +42,18 @@ case $SERVICE in
         DOCKERFILE="docker/cognee-mcp/Dockerfile"
         IMAGE_NAME="cognee-mcp"
         ;;
+    cognee-mcp-api|mcp-api)
+        DOCKERFILE="docker/cognee-mcp/Dockerfile.api"
+        IMAGE_NAME="cognee-mcp"
+        if [ "$VERSION" = "latest" ]; then
+            VERSION="api-latest"
+        else
+            VERSION="api-${VERSION}"  # 添加 api- 前缀
+        fi
+        ;;
     *)
         echo -e "${RED}❌ 错误: 未知的服务名称 '$SERVICE'${NC}"
-        echo "支持的服务: cognee, cognee-frontend, cognee-mcp"
+        echo "支持的服务: cognee, cognee-frontend, cognee-mcp, cognee-mcp-api"
         exit 1
         ;;
 esac

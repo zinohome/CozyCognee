@@ -9,6 +9,7 @@
 - [环境配置](#环境配置)
 - [服务说明](#服务说明)
 - [Cognee MCP 部署](./COGNEE_MCP_DEPLOYMENT.md) - MCP 服务器部署指南
+- [Cognee MCP 镜像优化](./COGNEE_MCP_IMAGE_OPTIMIZATION.md) - 镜像大小优化指南（API Mode 轻量级镜像）
 - [故障排查](#故障排查)
 
 ## 标准 Docker Compose 部署

@@ -43,7 +43,68 @@ MCP 服务器通过 HTTP 请求连接到已运行的 Cognee FastAPI 服务器。
 
 基本操作（`cognify`、`search`、`delete`、`list_data` 所有数据集）在两种模式下都可用。
 
+## 镜像大小优化
+
+### 问题
+
+默认的 `cognee-mcp:latest` 镜像包含完整的 cognee 库及其所有依赖（postgres、docs、neo4j 等），镜像大小约为 **8.5GB**。
+
+### 解决方案
+
+对于 **API Mode**，我们提供了轻量级镜像 `cognee-mcp:api-latest`，只安装必要的依赖，镜像大小约为 **2-3GB**，可以大幅减小镜像体积。
+
+### 构建轻量级镜像
+
+```bash
+# 构建 API Mode 轻量级镜像
+cd deployment
+./scripts/build-image.sh cognee-mcp-api
+
+# 或者直接使用 docker build
+docker build -f deployment/docker/cognee-mcp/Dockerfile.api -t cognee-mcp:api-latest .
+```
+
+### 镜像对比
+
+| 镜像 | 大小 | 用途 | 包含内容 |
+|------|------|------|----------|
+| `cognee-mcp:latest` | ~8.5GB | Direct Mode | 完整的 cognee 库 + 所有 extras |
+| `cognee-mcp:api-latest` | ~2-3GB | API Mode | 基础 cognee 包 + MCP 依赖 |
+
 ## Docker Compose 配置
+
+### API Mode 配置（推荐，轻量级）
+
+在 `docker-compose.1panel.yml` 中，cognee-mcp 服务已配置为 API Mode：
+
+```yaml
+cognee-mcp:
+  image: cognee-mcp:api-latest  # 使用轻量级 API Mode 镜像
+  container_name: cognee-mcp
+  restart: unless-stopped
+  profiles:
+    - mcp
+  ports:
+    - "8001:8000"
+  environment:
+    # ==================== 基础配置 ====================
+    - DEBUG=false
+    - ENVIRONMENT=production
+    - PYTHONUNBUFFERED=1
+    # ==================== MCP 配置 ====================
+    - TRANSPORT_MODE=sse
+    - MCP_LOG_LEVEL=INFO
+    # ==================== API Mode 配置 ====================
+    - API_URL=http://cognee:8000
+    # - API_TOKEN=your-api-token  # 如果 API 启用了认证
+  depends_on:
+    cognee:
+      condition: service_healthy
+  volumes:
+    - /data/cognee/mcp:/app/data
+  networks:
+    - 1panel-network
+```
 
 ### Direct Mode 配置
 

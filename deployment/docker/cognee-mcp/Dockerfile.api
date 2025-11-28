@@ -1,0 +1,69 @@
+# 轻量级 API Mode Dockerfile for cognee-mcp
+# 此 Dockerfile 专门用于 API Mode，只安装必要的依赖，大幅减小镜像体积
+# 
+# 构建方法：
+#   docker build -f deployment/docker/cognee-mcp/Dockerfile.api -t cognee-mcp:api-latest .
+#
+# 注意：API Mode 下不需要安装完整的 cognee extras（postgres, docs, neo4j 等）
+# 只需要基础包用于 logging_utils，主要功能通过 HTTP 请求到 API 服务器
+
+# 使用 uv 镜像进行构建（与官方 Dockerfile 保持一致）
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS uv
+
+WORKDIR /app
+
+# 设置构建参数
+ENV UV_LINK_MODE=copy
+
+# 安装系统依赖（仅构建阶段需要）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# 复制轻量级 pyproject.toml（API Mode 专用）
+# 使用 pyproject.toml.api，只包含基础依赖，不包含 cognee extras
+COPY project/cognee/cognee-mcp/pyproject.toml.api ./pyproject.toml
+COPY project/cognee/cognee-mcp/entrypoint.sh ./
+
+# 使用 uv sync 安装依赖（标准方式，自动解析依赖树）
+# 这会安装 cognee 基础包（不包含 extras）和其他 MCP 依赖
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev --no-editable
+
+# 复制源代码
+COPY project/cognee/cognee-mcp/src /app/src
+
+# 安装项目本身
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-editable
+
+# 运行时镜像（最小化）
+FROM python:3.12-slim-bookworm
+
+WORKDIR /app
+
+# 只安装运行时必需的库
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 从构建阶段复制虚拟环境和应用代码（与官方 Dockerfile 保持一致）
+COPY --from=uv /usr/local /usr/local
+COPY --from=uv /app /app
+
+RUN chmod +x /app/entrypoint.sh
+
+# 设置环境变量
+ENV PYTHONUNBUFFERED=1
+ENV MCP_LOG_LEVEL=INFO
+ENV PYTHONPATH=/app
+ENV PATH="/app/.venv/bin:$PATH"
+
+# 添加标签
+LABEL org.opencontainers.image.description="Cognee MCP Server - API Mode (Lightweight)"
+LABEL mode="api"
+
+# 入口点
+ENTRYPOINT ["/app/entrypoint.sh"]
+
