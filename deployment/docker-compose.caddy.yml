@@ -256,10 +256,13 @@ services:
     labels:
       createdBy: "Docker Compose"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      # Caddy 健康检查：检查进程
+      # caddy:alpine 镜像没有 wget 和 curl，使用进程检查
+      test: ["CMD-SHELL", "ps | grep -q '[c]addy'"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
   # Cognee 前端服务（可选）
   frontend:

@@ -257,10 +257,13 @@ services:
     labels:
       createdBy: "Apps"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      # Nginx 健康检查：检查进程和配置文件
+      # nginx:alpine 镜像没有 wget 和 curl，使用进程检查 + 配置文件验证
+      test: ["CMD-SHELL", "ps | grep -q '[n]ginx' && nginx -t > /dev/null 2>&1"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
   # Caddy 反向代理（统一后端服务，避免 CORS）
   # 注意：Caddy 自动处理 HTTPS 和 CORS，更简单易用
@@ -288,10 +291,13 @@ services:
     labels:
       createdBy: "Apps"
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      # Caddy 健康检查：检查进程
+      # caddy:alpine 镜像没有 wget 和 curl，使用进程检查
+      test: ["CMD-SHELL", "ps | grep -q '[c]addy'"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
   # Cognee 前端服务（可选）
   frontend:
