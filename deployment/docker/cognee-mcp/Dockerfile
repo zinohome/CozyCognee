@@ -35,7 +35,9 @@ RUN apt-get update && apt-get install -y \
 # 3. 只安装必要的 extras（postgres, neo4j）
 # 注意：onnxruntime 和 fastembed 默认安装 CPU 版本，不会安装 NVIDIA 驱动（与 cognee 一致）
 
-# 1. 复制 cognee 源代码（必须在安装依赖之前，因为使用 file:// 路径）
+# 1. 复制 cognee 源代码和必要文件（必须在安装依赖之前，因为使用 file:// 路径）
+# 与 cognee Dockerfile 保持一致：需要 README.md 用于构建
+COPY project/cognee/README.md /app/README.md
 COPY project/cognee/cognee /app/cognee
 COPY project/cognee/distributed /app/distributed
 COPY project/cognee/pyproject.toml /app/cognee-pyproject.toml
@@ -43,11 +45,12 @@ COPY project/cognee/pyproject.toml /app/cognee-pyproject.toml
 # 2. 复制 cognee-mcp 的依赖文件
 COPY project/cognee/cognee-mcp/pyproject.toml project/cognee/cognee-mcp/uv.lock project/cognee/cognee-mcp/entrypoint.sh ./
 
-# 3. 修改 pyproject.toml：使用本地 cognee 源代码，移除 docs extra
+# 3. 修改 pyproject.toml：使用本地 cognee 源代码，移除 docs extra，添加 scraping extra
 # 这样可以避免从 PyPI 安装包含 unstructured 的完整包
-RUN sed -i 's|"cognee\[postgres,docs,neo4j\]==0.3.7"|"cognee[postgres,neo4j] @ file:///app"|' pyproject.toml
+# 添加 scraping extra 以安装 protego 和 playwright（消除警告，与 cognee 一致）
+RUN sed -i 's|"cognee\[postgres,docs,neo4j\]==0.3.7"|"cognee[postgres,neo4j,scraping] @ file:///app"|' pyproject.toml
 
-# 4. 安装依赖（使用本地 cognee 源代码，不包含 docs extra）
+# 4. 安装依赖（使用本地 cognee 源代码，不包含 docs extra，包含 scraping extra）
 # 注意：由于使用本地路径，不能使用 --frozen（lock 文件不匹配）
 # onnxruntime 和 fastembed 默认安装 CPU 版本，不会安装 NVIDIA 驱动（与 cognee 一致）
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -62,10 +65,30 @@ COPY project/cognee/cognee-mcp/src /app/src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-dev --no-editable
 
+# 7. 安装 playwright 浏览器（可选，消除警告）
+# 注意：这会增加镜像大小（约 200MB），如果不需要 web scraping 功能可以注释掉
+# 与 cognee Dockerfile 保持一致
+RUN PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright python3 -m playwright install --with-deps chromium 2>/dev/null || echo "Playwright browsers installation skipped (optional)"
+
 FROM python:3.12-slim-bookworm
 
 RUN apt-get update && apt-get install -y \
     libpq5 \
+    # playwright 浏览器运行时依赖（与 cognee Dockerfile 一致）
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -73,6 +96,9 @@ WORKDIR /app
 # Copy the virtual environment from the uv stage
 COPY --from=uv /usr/local /usr/local
 COPY --from=uv /app /app
+# playwright 浏览器已经通过 COPY --from=uv /app /app 一起复制过来了（在 /app/.cache/ms-playwright）
+# 设置环境变量指向 playwright 浏览器位置（与 cognee Dockerfile 一致）
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright
 
 RUN chmod +x /app/entrypoint.sh
 
