@@ -15,7 +15,8 @@ RUN npm rebuild lightningcss
 # Copy the rest of the application code to the working directory
 COPY project/cognee/cognee-frontend/src ./src
 COPY project/cognee/cognee-frontend/public ./public
-COPY project/cognee/cognee-frontend/next.config.mjs .
+# Apply CozyCognee patches: 使用补丁版本的 next.config.mjs 来禁用 devIndicators
+COPY deployment/docker/cognee-frontend/patches/next.config.mjs ./next.config.mjs
 COPY project/cognee/cognee-frontend/postcss.config.mjs .
 COPY project/cognee/cognee-frontend/tsconfig.json .
 
@@ -36,6 +37,11 @@ ENV NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=${NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT}
 
 # Disable telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# CozyCognee: 禁用开发指示器（devIndicators）
+# 设置此环境变量为 true 来隐藏左下角的开发工具指示器
+# 默认禁用，如需启用可设置为 false 或不设置
+ENV NEXT_DISABLE_DEV_INDICATORS=true
 
 EXPOSE 3000
 
