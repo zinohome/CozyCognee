@@ -91,11 +91,12 @@ services:
     labels:
       createdBy: "Apps"
     healthcheck:
-      # 使用 /health 端点进行健康检查（更可靠）
-      # 如果 curl 不可用，可以使用 Python: python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-      test: ["CMD", "curl", "-f", "--max-time", "5", "http://localhost:8000/health"]
+      # 使用 /docs 端点进行健康检查（确保服务完全启动且 API 文档可访问）
+      # 注意：容器内部直接访问 FastAPI，使用 /docs（不是 /api/docs，那是 Caddy 映射的路径）
+      # 如果 curl 不可用，可以使用 Python: python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"
+      test: ["CMD", "curl", "-f", "--max-time", "5", "http://localhost:8000/docs"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
       start_period: 60s
 
@@ -138,13 +139,14 @@ services:
     labels:
       createdBy: "Apps"
     healthcheck:
-      # 使用 /health 端点进行健康检查（更可靠）
+      # 使用 /health 端点进行健康检查（MCP 服务器提供的健康检查端点）
+      # 注意：MCP 服务器不是 FastAPI，使用自定义的 /health 端点
       # 如果 curl 不可用，可以使用 Python: python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-      test: ["CMD", "curl", "-f", "--max-time", "5", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8000/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 3s
       retries: 3
-      start_period: 60s
+      start_period: 45s
   # Cognee MCP 服务 - Direct Mode（完整功能）
   # Direct Mode：直接使用 cognee 库，需要所有 cognee 的环境变量
   # 使用镜像: cognee-mcp:latest (约 1.5-2GB，包含完整依赖)
@@ -228,11 +230,12 @@ services:
     labels:
       createdBy: "Apps"
     healthcheck:
-      # 使用 /health 端点进行健康检查（更可靠）
-      # 如果 curl 不可用，可以使用 Python: python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
-      test: ["CMD", "curl", "-f", "--max-time", "5", "http://localhost:8000/health"]
+      # 使用 /docs 端点进行健康检查（确保服务完全启动且 API 文档可访问）
+      # 注意：容器内部直接访问 FastAPI，使用 /docs（不是 /api/docs，那是 Caddy 映射的路径）
+      # 如果 curl 不可用，可以使用 Python: python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"
+      test: ["CMD", "curl", "-f", "--max-time", "5", "http://localhost:8000/docs"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
       start_period: 60s
   # Caddy 反向代理（统一后端服务，避免 CORS）
@@ -242,7 +245,7 @@ services:
     container_name: cognee_caddy
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "80:80"
     volumes:
       - /data/cognee/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - /data/cognee/caddy/data:/data
@@ -279,11 +282,13 @@ services:
       # 运行时环境变量（会覆盖构建时的默认值）
       # 注意：NEXT_PUBLIC_* 变量在开发模式下可以在运行时修改
       # 使用 Caddy 反向代理统一后端服务，避免 CORS 问题
-      # 所有 API 请求都通过 caddy:8080，由 caddy 路由到对应的后端服务
-      - NEXT_PUBLIC_BACKEND_API_URL=http://192.168.66.11:8080/api
+      # 所有 API 请求都通过 Caddy（80 端口），由 Caddy 路由到对应的后端服务
+      # 前端代码会构建 /api/v1/... 路径，所以这里不包含 /api 后缀
+      # 使用相对路径，自动使用当前域名（通过 Caddy 访问）
+      - NEXT_PUBLIC_BACKEND_API_URL=http://192.168.66.11
       # NEXT_PUBLIC_CLOUD_API_URL: 本地部署不需要 cloud API，留空或注释掉
-      # - NEXT_PUBLIC_CLOUD_API_URL=http://192.168.66.11:8080/api
-      - NEXT_PUBLIC_MCP_API_URL=http://192.168.66.11:8080/mcp-api
+      # - NEXT_PUBLIC_CLOUD_API_URL=http://192.168.66.11/api
+      - NEXT_PUBLIC_MCP_API_URL=http://192.168.66.11/mcp-api
       - NEXT_PUBLIC_COGWIT_API_KEY=
       - NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=false
     depends_on:
@@ -296,8 +301,9 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
+      start_period: 30s
 
   # PostgreSQL 关系数据库
   postgres:
@@ -388,8 +394,14 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    # MinIO 容器可能没有 ps/grep 等工具，使用 service_started 代替健康检查
-    # 如果需要健康检查，可以安装 curl 或使用其他方法
+    healthcheck:
+      # MinIO 健康检查：使用健康检查端点
+      # MinIO 提供 /minio/health/live 端点用于健康检查
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # Neo4j 图数据库
   neo4j:
@@ -416,8 +428,9 @@ services:
     healthcheck:
       test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "pleaseletmein", "RETURN 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 8s
       retries: 3
+      start_period: 60s
 
   # Redis Insight 管理工具
   redisinsight:
@@ -436,8 +449,9 @@ services:
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5540"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
+      start_period: 30s
     # Redis Insight 可以通过 Web UI 连接到 redis 服务
     # 连接信息: redis://:cognee_redis_password@redis:6379/0
 
