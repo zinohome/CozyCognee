@@ -76,11 +76,11 @@ services:
       - DEFAULT_USER_PASSWORD=passw0rd
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
       pgvector:
-        condition: service_healthy
+        condition: service_started
       redis:
-        condition: service_healthy
+        condition: service_started
       minio:
         condition: service_started
     volumes:
@@ -90,8 +90,6 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      # 使用 /docs 端点进行健康检查（确保服务完全启动且 API 文档可访问）
       # 注意：容器内部直接访问 FastAPI，使用 /docs（不是 /api/docs，那是 Caddy 映射的路径）
       # 如果 curl 不可用，可以使用 Python: python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"
       test: ["CMD", "curl", "-f", "--max-time", "5", "http://localhost:8000/docs"]
@@ -130,7 +128,7 @@ services:
       # - CORS_ALLOWED_ORIGINS=*
     depends_on:
       cognee:
-        condition: service_healthy
+        condition: service_started
       # API Mode 下不需要直接依赖 postgres（通过 cognee API 访问）
     volumes:
       - /data/cognee/mcp-api:/app/data
@@ -138,8 +136,6 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      # 使用 /health 端点进行健康检查（MCP 服务器提供的健康检查端点）
       # 注意：MCP 服务器不是 FastAPI，使用自定义的 /health 端点
       # 如果 curl 不可用，可以使用 Python: python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
       test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8000/health"]
@@ -216,11 +212,11 @@ services:
       - TELEMETRY_DISABLED=1
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
       pgvector:
-        condition: service_healthy
+        condition: service_started
       redis:
-        condition: service_healthy
+        condition: service_started
       minio:
         condition: service_started
     volumes:
@@ -229,8 +225,6 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      # 使用 /docs 端点进行健康检查（确保服务完全启动且 API 文档可访问）
       # 注意：容器内部直接访问 FastAPI，使用 /docs（不是 /api/docs，那是 Caddy 映射的路径）
       # 如果 curl 不可用，可以使用 Python: python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"
       test: ["CMD", "curl", "-f", "--max-time", "5", "http://localhost:8000/docs"]
@@ -252,23 +246,15 @@ services:
       - /data/cognee/caddy/config:/config
     depends_on:
       cognee:
-        condition: service_healthy
+        condition: service_started
       cognee-mcp-api:
-        condition: service_healthy
+        condition: service_started
       cognee-mcp-direct:
-        condition: service_healthy
+        condition: service_started
     networks:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      # Caddy 健康检查：检查进程
-      # caddy:alpine 镜像没有 wget 和 curl，使用进程检查
-      test: ["CMD-SHELL", "ps | grep -q '[c]addy'"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
   # Cognee 前端服务（可选）
   frontend:
@@ -292,13 +278,11 @@ services:
       - NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=false
     depends_on:
       caddy:
-        condition: service_healthy
+        condition: service_started
     networks:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -322,8 +306,6 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cognee_user -d cognee_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -346,8 +328,6 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cognee_vector_user -d cognee_vector_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -368,8 +348,6 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "cognee_redis_password", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -393,8 +371,6 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      # MinIO 健康检查：使用健康检查端点
       # MinIO 提供 /minio/health/live 端点用于健康检查
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -424,8 +400,6 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "pleaseletmein", "RETURN 1"]
       interval: 30s
       timeout: 8s
       retries: 3
@@ -445,8 +419,6 @@ services:
       - 1panel-network
     labels:
       createdBy: "Apps"
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5540"]
       interval: 30s
       timeout: 5s
       retries: 3
