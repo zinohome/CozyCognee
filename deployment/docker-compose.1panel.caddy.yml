@@ -276,6 +276,8 @@ services:
       - NEXT_PUBLIC_MCP_API_URL=http://192.168.66.11/mcp-api
       - NEXT_PUBLIC_COGWIT_API_KEY=
       - NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=false
+      # CozyCognee: 禁用开发指示器（devIndicators）
+      - NEXT_DISABLE_DEV_INDICATORS=true
     depends_on:
       caddy:
         condition: service_started
