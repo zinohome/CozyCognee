@@ -85,6 +85,21 @@ S3_SECRET_KEY=minioadmin
 S3_BUCKET_NAME=cognee-storage
 S3_USE_SSL=false
 
+# ==================== CORS 配置 ====================
+# ⚠️ 重要：本地开发时必须配置 CORS，否则前端无法访问后端 API
+# 前端运行在 localhost:3000，后端运行在 localhost:8000，属于不同源，会触发 CORS 检查
+# 
+# 方式一：允许所有来源（推荐用于本地开发）
+CORS_ALLOWED_ORIGINS=*
+
+# 方式二：指定具体的前端地址（更安全）
+# CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+# 注意：
+# - 如果使用 "*"，后端会禁用 allow_credentials（浏览器安全限制）
+# - 如果使用具体地址列表，可以启用 allow_credentials
+# - Docker/Nginx 环境不需要配置 CORS，因为 Nginx 反向代理统一了请求源
+
 # ==================== 其他配置 ====================
 EXTRAS=api,postgres,neo4j
 PYTHONUNBUFFERED=1
@@ -222,6 +237,51 @@ ls -la project/cognee/.env
 cd project/cognee
 python -c "import os; from dotenv import load_dotenv; load_dotenv(); print(os.getenv('DB_HOST'))"
 ```
+
+### CORS 跨域问题
+
+**问题现象**：
+- 前端创建 dataset 时出现 CORS 错误
+- 删除 dataset 正常，但创建失败
+- 浏览器控制台显示：`Access to fetch at 'http://localhost:8000/api/v1/datasets' from origin 'http://localhost:3000' has been blocked by CORS policy`
+
+**原因**：
+- 本地开发时，前端（`localhost:3000`）和后端（`localhost:8000`）是**不同的源**
+- POST 请求会触发 CORS 预检（因为设置了 `Content-Type: application/json`）
+- DELETE 请求可能不会触发预检，所以删除正常但创建失败
+
+**解决方案**：
+1. 在 `project/cognee/.env` 文件中添加：
+   ```bash
+   CORS_ALLOWED_ORIGINS=*
+   ```
+   或指定具体地址：
+   ```bash
+   CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+   ```
+
+2. 重启后端服务：
+   ```bash
+   # 停止当前运行的后端
+   # 然后重新启动
+   cd project/cognee
+   uv run python -m cognee.api.client
+   ```
+
+3. 验证 CORS 配置：
+   ```bash
+   # 检查后端日志，确认 CORS 配置已加载
+   # 或使用 curl 测试 OPTIONS 预检请求
+   curl -X OPTIONS http://localhost:8000/api/v1/datasets \
+     -H "Origin: http://localhost:3000" \
+     -H "Access-Control-Request-Method: POST" \
+     -v
+   ```
+
+**为什么 Docker/Nginx 环境不需要配置 CORS？**
+- Docker/Nginx 环境使用反向代理，所有请求都通过 Nginx（`localhost:8080`）
+- 前端和后端都通过同一个源（Nginx）访问，浏览器不会触发 CORS 检查
+- Nginx 在配置文件中已经处理了 CORS 头
 
 ## 下一步
 

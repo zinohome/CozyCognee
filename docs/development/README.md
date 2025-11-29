@@ -10,6 +10,13 @@
 - [项目结构](#项目结构)
 - [代码同步](#代码同步)
 - [构建镜像](#构建镜像)
+- [常见问题](#常见问题)
+
+## 详细文档
+
+- [本地开发配置指南](./LOCAL_DEV_SETUP.md) - 详细的本地开发环境配置步骤
+- [快速启动指南](./QUICK_START_COGNEE.md) - 快速启动 Cognee 后端
+- [CORS 跨域问题排查](./CORS_LOCAL_DEV.md) - 本地开发时的 CORS 问题解决方案
 
 ## 开发环境设置
 
@@ -329,6 +336,16 @@ docker-compose -f docker-compose.test.yml down
 - 提交信息: 使用清晰的提交信息
 
 ## 常见问题
+
+### CORS 跨域问题
+
+**问题**：本地开发时，前端创建 dataset 失败，出现 CORS 错误，但删除正常。
+
+**原因**：前端（`localhost:3000`）和后端（`localhost:8000`）是不同源，POST 请求会触发 CORS 预检。
+
+**解决**：在 `project/cognee/.env` 中添加 `CORS_ALLOWED_ORIGINS=*`
+
+**详细说明**：请查看 [CORS 跨域问题排查文档](./CORS_LOCAL_DEV.md)
 
 ### 依赖安装失败
 
