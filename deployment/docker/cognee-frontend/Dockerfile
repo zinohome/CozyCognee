@@ -17,6 +17,8 @@ COPY project/cognee/cognee-frontend/src ./src
 COPY project/cognee/cognee-frontend/public ./public
 # Apply CozyCognee patches: 使用补丁版本的 next.config.mjs 来禁用 devIndicators
 COPY deployment/docker/cognee-frontend/patches/next.config.mjs ./next.config.mjs
+# Apply CozyCognee patches: 使用补丁版本的 InstanceDatasetsAccordion.tsx 来禁用自动 cloud 连接检测
+COPY deployment/docker/cognee-frontend/patches/InstanceDatasetsAccordion.tsx ./src/app/dashboard/InstanceDatasetsAccordion.tsx
 COPY project/cognee/cognee-frontend/postcss.config.mjs .
 COPY project/cognee/cognee-frontend/tsconfig.json .
 
@@ -27,6 +29,7 @@ ARG NEXT_PUBLIC_CLOUD_API_URL=http://cognee-mcp:8000
 ARG NEXT_PUBLIC_MCP_API_URL=http://cognee-mcp:8000
 ARG NEXT_PUBLIC_COGWIT_API_KEY=
 ARG NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=false
+ARG NEXT_PUBLIC_DISABLE_CLOUD_CHECK=true
 
 # Set environment variables (这些会在运行时可用)
 ENV NEXT_PUBLIC_BACKEND_API_URL=${NEXT_PUBLIC_BACKEND_API_URL}
@@ -34,6 +37,7 @@ ENV NEXT_PUBLIC_CLOUD_API_URL=${NEXT_PUBLIC_CLOUD_API_URL}
 ENV NEXT_PUBLIC_MCP_API_URL=${NEXT_PUBLIC_MCP_API_URL}
 ENV NEXT_PUBLIC_COGWIT_API_KEY=${NEXT_PUBLIC_COGWIT_API_KEY}
 ENV NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=${NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT}
+ENV NEXT_PUBLIC_DISABLE_CLOUD_CHECK=${NEXT_PUBLIC_DISABLE_CLOUD_CHECK}
 
 # Disable telemetry
 ENV NEXT_TELEMETRY_DISABLED=1

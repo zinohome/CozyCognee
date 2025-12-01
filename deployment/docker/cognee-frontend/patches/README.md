@@ -28,11 +28,36 @@
 - 此补丁仅在开发模式下有效（生产环境不会显示 devIndicators）
 - Next.js 本身不支持通过环境变量控制 devIndicators，此补丁通过读取环境变量实现
 
+### `InstanceDatasetsAccordion.tsx`
+
+**修改内容**: 禁用自动检测 cloud 连接
+
+**修改原因**: 在本地部署时，前端会自动检测 cloud 连接，导致出现 `CloudApiKeyMissingError` 错误。通过补丁禁用自动检测，避免不必要的错误。
+
+**配置选项**:
+- 通过环境变量 `NEXT_PUBLIC_DISABLE_CLOUD_CHECK` 控制
+- `NEXT_PUBLIC_DISABLE_CLOUD_CHECK=true` - 禁用自动检测（默认）
+- `NEXT_PUBLIC_DISABLE_CLOUD_CHECK=false` 或不设置 - 启用自动检测
+
+**使用方法**: 
+- 补丁在 Dockerfile 构建时自动应用
+- Dockerfile 中默认设置 `NEXT_PUBLIC_DISABLE_CLOUD_CHECK=true` 来禁用自动检测
+- 如需启用，可以在 docker-compose 文件中覆盖此环境变量：
+  ```yaml
+  environment:
+    - NEXT_PUBLIC_DISABLE_CLOUD_CHECK=false
+  ```
+
+**注意事项**: 
+- 禁用自动检测后，用户仍可以手动点击连接 cloud
+- 此补丁仅影响自动检测，不影响手动连接功能
+
 ## 目录结构
 
 ```
 patches/
-└── next.config.mjs  # Next.js 配置补丁
+├── next.config.mjs  # Next.js 配置补丁
+└── InstanceDatasetsAccordion.tsx  # 禁用 cloud 连接自动检测补丁
 ```
 
 ## 应用补丁
@@ -42,6 +67,8 @@ patches/
 ```dockerfile
 # Apply CozyCognee patches: 使用补丁版本的 next.config.mjs 来禁用 devIndicators
 COPY deployment/docker/cognee-frontend/patches/next.config.mjs ./next.config.mjs
+# Apply CozyCognee patches: 使用补丁版本的 InstanceDatasetsAccordion.tsx 来禁用自动 cloud 连接检测
+COPY deployment/docker/cognee-frontend/patches/InstanceDatasetsAccordion.tsx ./src/app/dashboard/InstanceDatasetsAccordion.tsx
 ```
 
 ## 维护说明
