@@ -41,9 +41,11 @@ services:
       - DB_USERNAME=cognee_user
       - DB_PASSWORD=cognee_password
       # ==================== 向量数据库配置 ====================
-      # 使用 pgvector (独立的 pgvector 服务)
+      # 使用 pgvector (向量数据存储在关系数据库中，与关系数据共享同一个 PostgreSQL 实例)
+      # 注意：Cognee 的设计是当 VECTOR_DB_PROVIDER=pgvector 时，会忽略 VECTOR_DB_URL，
+      # 而是使用 DATABASE_URL 指向的数据库。但为了配置清晰，仍然设置 VECTOR_DB_URL 指向 postgres。
       - VECTOR_DB_PROVIDER=pgvector
-      - VECTOR_DB_URL=postgresql://cognee_vector_user:cognee_vector_password@pgvector:5432/cognee_vector_db
+      - VECTOR_DB_URL=postgresql://cognee_user:cognee_password@postgres:5432/cognee_db
       # 如果使用其他向量数据库，需要配置相应的 URL 和 KEY
       # ==================== 图数据库配置 ====================
       - GRAPH_DATABASE_PROVIDER=neo4j  # 可选: kuzu, neo4j
@@ -73,8 +75,6 @@ services:
       - DEFAULT_USER_PASSWORD=passw0rd
     depends_on:
       postgres:
-        condition: service_started
-      pgvector:
         condition: service_started
       redis:
         condition: service_started
@@ -182,8 +182,11 @@ services:
       - DB_USERNAME=cognee_user
       - DB_PASSWORD=cognee_password
       # ==================== 向量数据库配置 ====================
+      # 使用 pgvector (向量数据存储在关系数据库中，与关系数据共享同一个 PostgreSQL 实例)
+      # 注意：Cognee 的设计是当 VECTOR_DB_PROVIDER=pgvector 时，会忽略 VECTOR_DB_URL，
+      # 而是使用 DATABASE_URL 指向的数据库。但为了配置清晰，仍然设置 VECTOR_DB_URL 指向 postgres。
       - VECTOR_DB_PROVIDER=pgvector
-      - VECTOR_DB_URL=postgresql://cognee_vector_user:cognee_vector_password@pgvector:5432/cognee_vector_db
+      - VECTOR_DB_URL=postgresql://cognee_user:cognee_password@postgres:5432/cognee_db
       # ==================== 图数据库配置 ====================
       - GRAPH_DATABASE_PROVIDER=neo4j
       - GRAPH_DATABASE_NAME=neo4j
@@ -209,8 +212,6 @@ services:
       - TELEMETRY_DISABLED=1
     depends_on:
       postgres:
-        condition: service_started
-      pgvector:
         condition: service_started
       redis:
         condition: service_started
@@ -287,9 +288,10 @@ services:
       retries: 3
       start_period: 30s
 
-  # PostgreSQL 关系数据库
+  # PostgreSQL 关系数据库（使用带 pgvector 扩展的镜像）
+  # 注意：向量数据也存储在此数据库中，Cognee 的设计是向量数据和关系数据在同一数据库
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:0.8.1-pg17-trixie
     container_name: cognee_postgres
     restart: unless-stopped
     ports:
@@ -309,29 +311,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # pgvector 向量数据库（独立的 PostgreSQL 实例，带 pgvector 扩展）
-  pgvector:
-    image: pgvector/pgvector:0.8.1-pg17-trixie
-    container_name: cognee_pgvector
-    restart: unless-stopped
-    ports:
-      - "5433:5432"
-    environment:
-      - POSTGRES_USER=cognee_vector_user
-      - POSTGRES_PASSWORD=cognee_vector_password
-      - POSTGRES_DB=cognee_vector_db
-      - PGDATA=/var/lib/postgresql/data/pgdata
-    volumes:
-      - pgvector_data:/var/lib/postgresql/data
-    networks:
-      - cognee-network
-    labels:
-      createdBy: "Docker Compose"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Redis 缓存和消息队列
+# Redis 缓存和消息队列
   redis:
     image: redis:7-alpine
     container_name: cognee_redis
@@ -438,7 +418,6 @@ volumes:
   cognee_caddy_data:
   cognee_caddy_config:
   postgres_data:
-  pgvector_data:
   redis_data:
   minio_data:
   neo4j_data:
