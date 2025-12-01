@@ -5,6 +5,7 @@
 ## 目录
 
 - [快速开始](#快速开始)
+- [支持的文件格式](./SUPPORTED_FILE_FORMATS.md)
 - [API 使用](#api-使用)
 - [前端使用](#前端使用)
 - [MCP 集成](#mcp-集成)
@@ -29,6 +30,26 @@ curl http://localhost:8000/health
 # 查看 API 文档
 open http://localhost:8000/docs
 ```
+
+## 支持的文件格式
+
+Cognee 支持多种文件格式，包括文本、PDF、Office 文档、图片、音频等。
+
+**详细说明**：
+- [CozyCognee 实际支持的文件格式](./SUPPORTED_FILE_FORMATS_COZYCOGNEE.md) - **推荐查看**（基于我们当前的 Docker 配置）
+- [完整支持的文件格式列表](./SUPPORTED_FILE_FORMATS.md) - 包含所有可能的文件格式（需要完整安装）
+- [文件大小限制](./FILE_SIZE_LIMITS.md) - 文件上传和处理的大小限制说明
+
+**快速参考**：
+- ✅ **文本文件**：`.txt`, `.md`, `.csv`, `.json`, `.xml`, `.yaml`, `.log`
+- ✅ **PDF 文件**：`.pdf`
+- ✅ **Office 文档**：`.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.rtf`
+- ✅ **图片文件**：`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.tif`, `.bmp` 等
+- ✅ **音频文件**：`.mp3`, `.wav`, `.m4a`, `.ogg`, `.flac` 等
+- ✅ **HTML 文件**：`.html`, `.htm`
+- ✅ **代码文件**：`.py`, `.js`, `.ts`, `.java`, `.cpp` 等（作为文本处理）
+
+**重要**：所有能够成功通过 `add()` 上传的文件，都可以正常进行 `cognify` 和 `memify` 操作。
 
 ## API 使用
 
