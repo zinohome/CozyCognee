@@ -310,9 +310,13 @@ handle /mcp-direct/health {
 # 路径: / -> cognee-frontend:3000
 # 注意：这个 handle 必须在最后，因为 Caddy 按顺序匹配
 # 精确匹配和前缀匹配（/api/, /mcp-api/）会优先于这个通用匹配
+# 与 Nginx 的 location / 一致：使用通用匹配处理所有请求，包括 WebSocket
 
 # Next.js WebSocket HMR 路径（/_next/webpack-hmr）
-# 必须明确处理此路径，否则 WebSocket 连接会失败
+# 根据 Sentry 文章：Next.js 12+ 使用 WebSocket 进行 HMR
+# 参考：https://sentry.io/answers/websocket-connection-to-ws-app-url-next-webpack-hmr-failed-websocket-is-closed-before-the-connection-is-established/
+# Caddy 的 reverse_proxy 应该能够自动检测并处理 WebSocket 升级请求
+# 我们只需要确保使用 HTTP/1.1 协议，并让 Caddy 自动传递所有必要的头
 handle /_next/webpack-hmr* {
     reverse_proxy cognee-frontend:3000 {
         header_up Host {host}
@@ -322,13 +326,20 @@ handle /_next/webpack-hmr* {
         header_up X-Forwarded-Host {host}
         header_up X-Forwarded-Port {port}
         
-        # WebSocket 升级（必须明确传递）
-        header_up Connection {>Connection}
-        header_up Upgrade {>Upgrade}
+        # 注意：不要手动设置 Upgrade 和 Connection 头
+        # Caddy 的 reverse_proxy 会自动检测 WebSocket 升级请求并传递这些头
+        # 手动设置可能会干扰自动检测机制
+        
+        # 使用 HTTP/1.1 协议（WebSocket 需要）
+        transport http {
+            versions 1.1
+            dial_timeout 60s
+            response_header_timeout 60s
+        }
     }
 }
 
-# 处理所有其他前端请求（包括普通 HTTP 和页面）
+# 处理所有其他前端请求（普通 HTTP 请求和页面）
 handle {
     reverse_proxy cognee-frontend:3000 {
         header_up Host {host}
@@ -339,10 +350,6 @@ handle {
         # Next.js 特定配置
         header_up X-Forwarded-Host {host}
         header_up X-Forwarded-Port {port}
-        
-        # WebSocket 支持（Caddy 会自动检测，但明确传递更安全）
-        header_up Connection {>Connection}
-        header_up Upgrade {>Upgrade}
         
         # 超时设置
         transport http {
