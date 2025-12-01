@@ -30,27 +30,24 @@
 
 ### `InstanceDatasetsAccordion.tsx`
 
-**修改内容**: 禁用自动检测 cloud 连接
+**修改内容**: 完全删除 cloud cognee 相关内容
 
-**修改原因**: 在本地部署时，前端会自动检测 cloud 连接，导致出现 `CloudApiKeyMissingError` 错误。通过补丁禁用自动检测，避免不必要的错误。
+**修改原因**: 在本地部署时，不需要 cloud cognee 功能。删除所有 cloud cognee 相关内容可以简化用户界面，避免出现 `CloudApiKeyMissingError` 错误。
 
-**配置选项**:
-- 通过环境变量 `NEXT_PUBLIC_DISABLE_CLOUD_CHECK` 控制
-- `NEXT_PUBLIC_DISABLE_CLOUD_CHECK=true` - 禁用自动检测（默认）
-- `NEXT_PUBLIC_DISABLE_CLOUD_CHECK=false` 或不设置 - 启用自动检测
+**删除的元素**:
+- cloud cognee 连接状态检测
+- cloud cognee 连接按钮
+- cloud cognee 连接模态框
+- cloud cognee 数据集显示
+- 所有与 cloud cognee 相关的状态管理和函数
 
 **使用方法**: 
 - 补丁在 Dockerfile 构建时自动应用
-- Dockerfile 中默认设置 `NEXT_PUBLIC_DISABLE_CLOUD_CHECK=true` 来禁用自动检测
-- 如需启用，可以在 docker-compose 文件中覆盖此环境变量：
-  ```yaml
-  environment:
-    - NEXT_PUBLIC_DISABLE_CLOUD_CHECK=false
-  ```
+- 无需额外配置
 
 **注意事项**: 
-- 禁用自动检测后，用户仍可以手动点击连接 cloud
-- 此补丁仅影响自动检测，不影响手动连接功能
+- 删除后，用户无法在 UI 中连接或使用 cloud cognee
+- 只保留 local cognee 功能
 
 ### `Header.tsx`
 
@@ -108,7 +105,7 @@
 ```
 patches/
 ├── next.config.mjs  # Next.js 配置补丁
-├── InstanceDatasetsAccordion.tsx  # 禁用 cloud 连接自动检测补丁
+├── InstanceDatasetsAccordion.tsx  # 删除 cloud cognee 相关内容补丁
 ├── Header.tsx  # 删除 Sync 按钮、Premium 链接和 API keys 链接补丁
 ├── Dashboard.tsx  # 删除 "Select a plan" 按钮补丁
 └── Account.tsx  # 删除 "Select a plan" 按钮补丁
@@ -121,7 +118,7 @@ patches/
 ```dockerfile
 # Apply CozyCognee patches: 使用补丁版本的 next.config.mjs 来禁用 devIndicators
 COPY deployment/docker/cognee-frontend/patches/next.config.mjs ./next.config.mjs
-# Apply CozyCognee patches: 使用补丁版本的 InstanceDatasetsAccordion.tsx 来禁用自动 cloud 连接检测
+# Apply CozyCognee patches: 使用补丁版本的 InstanceDatasetsAccordion.tsx 来删除 cloud cognee 相关内容
 COPY deployment/docker/cognee-frontend/patches/InstanceDatasetsAccordion.tsx ./src/app/dashboard/InstanceDatasetsAccordion.tsx
 # Apply CozyCognee patches: 使用补丁版本的 Header.tsx 来删除 Sync 按钮、Premium 链接和 API keys 链接
 COPY deployment/docker/cognee-frontend/patches/Header.tsx ./src/ui/Layout/Header.tsx

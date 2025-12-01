@@ -17,7 +17,7 @@ COPY project/cognee/cognee-frontend/src ./src
 COPY project/cognee/cognee-frontend/public ./public
 # Apply CozyCognee patches: 使用补丁版本的 next.config.mjs 来禁用 devIndicators
 COPY deployment/docker/cognee-frontend/patches/next.config.mjs ./next.config.mjs
-# Apply CozyCognee patches: 使用补丁版本的 InstanceDatasetsAccordion.tsx 来禁用自动 cloud 连接检测
+# Apply CozyCognee patches: 使用补丁版本的 InstanceDatasetsAccordion.tsx 来删除 cloud cognee 相关内容
 COPY deployment/docker/cognee-frontend/patches/InstanceDatasetsAccordion.tsx ./src/app/dashboard/InstanceDatasetsAccordion.tsx
 # Apply CozyCognee patches: 使用补丁版本的 Header.tsx 来删除 Sync 按钮、Premium 链接和 API keys 链接
 COPY deployment/docker/cognee-frontend/patches/Header.tsx ./src/ui/Layout/Header.tsx
