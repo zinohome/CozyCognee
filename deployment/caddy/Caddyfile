@@ -1,6 +1,6 @@
 # Caddy 反向代理配置
 # 统一后端服务，避免 CORS 问题
-# Caddy 自动处理 HTTPS 和 CORS
+# 根据 nginx.conf 配置生成，实现相同的功能
 
 :80
 
@@ -11,9 +11,9 @@ request_body {
 
 # ==================== CORS 配置 ====================
 # 统一添加 CORS 头，允许前端跨域访问
-# 注意：如果前端和后端都通过同一个反向代理访问（相同端口），则不需要 CORS
-# 但如果前端在 3000 端口，API 在 8080 端口，则需要 CORS 头
-# 处理 OPTIONS 预检请求
+# 动态设置 CORS Origin（支持 localhost、127.0.0.1、192.168.x.x）
+
+# 处理 OPTIONS 预检请求（CORS 预检）
 @options {
     method OPTIONS
 }
@@ -23,22 +23,15 @@ handle @options {
         Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
         Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
         Access-Control-Allow-Credentials "true"
+        Access-Control-Max-Age "1728000"
     }
     respond 204
 }
 
-# 为所有响应添加 CORS 头（除了 OPTIONS 请求）
-header {
-    Access-Control-Allow-Origin "*"
-    Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-    Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
-    Access-Control-Allow-Credentials "true"
-}
-
 # ==================== Cognee 主 API ====================
-# 路径: /api/* -> cognee:8000/api/*
+# 路径: /api/* -> cognee:8000/api/* (保留完整路径，因为后端路由是 /api/v1/*)
 
-# FastAPI 文档路径映射：/api/docs -> /docs
+# FastAPI 文档路径映射：/api/docs -> /docs (直接代理，不重定向)
 handle /api/docs {
     rewrite * /docs
     reverse_proxy cognee:8000 {
@@ -46,6 +39,20 @@ handle /api/docs {
         header_up X-Real-IP {remote}
         header_up X-Forwarded-For {remote}
         header_up X-Forwarded-Proto {scheme}
+        
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+    }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
     }
 }
 
@@ -57,10 +64,49 @@ handle /api/redoc {
         header_up X-Real-IP {remote}
         header_up X-Forwarded-For {remote}
         header_up X-Forwarded-Proto {scheme}
+        
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+    }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
     }
 }
 
-# OpenAPI JSON 规范文件：/api/openapi.json -> /openapi.json
+# OpenAPI JSON 规范文件：/openapi.json -> cognee:8000/openapi.json
+# Swagger UI 会从根路径请求 /openapi.json（当访问 /api/docs 时）
+handle /openapi.json {
+    reverse_proxy cognee:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+    }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
+}
+
+# OpenAPI JSON 规范文件（通过 /api/openapi.json 访问）
 handle /api/openapi.json {
     rewrite * /openapi.json
     reverse_proxy cognee:8000 {
@@ -68,10 +114,24 @@ handle /api/openapi.json {
         header_up X-Real-IP {remote}
         header_up X-Forwarded-For {remote}
         header_up X-Forwarded-Proto {scheme}
+        
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+    }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
     }
 }
 
-# 正常路径：/api/* -> cognee:8000/api/*
+# 正常路径：/api/* -> cognee:8000/api/* (包括 /api/v1/* 等)
 handle /api/* {
     reverse_proxy cognee:8000 {
         header_up Host {host}
@@ -83,17 +143,49 @@ handle /api/* {
         header_up Connection {>Connection}
         header_up Upgrade {>Upgrade}
         
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+        
         # 超时设置
         transport http {
             dial_timeout 60s
             response_header_timeout 60s
         }
     }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
 }
 
 # Cognee 健康检查
 handle /health {
-    reverse_proxy cognee:8000
+    reverse_proxy cognee:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+    }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
 }
 
 # ==================== Cognee MCP API Mode ====================
@@ -105,6 +197,12 @@ handle_path /mcp-api/* {
         header_up X-Forwarded-For {remote}
         header_up X-Forwarded-Proto {scheme}
         
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+        
         # SSE 支持（Server-Sent Events）
         header_up Connection ""
         header_up Cache-Control "no-cache"
@@ -115,12 +213,38 @@ handle_path /mcp-api/* {
             response_header_timeout 300s
         }
     }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
 }
 
-# MCP API 健康检查（去除 /mcp-api/ 前缀）
+# MCP API 健康检查
 handle /mcp-api/health {
     rewrite * /health
-    reverse_proxy cognee-mcp-api:8000
+    reverse_proxy cognee-mcp-api:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+    }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
 }
 
 # ==================== Cognee MCP Direct Mode ====================
@@ -132,6 +256,12 @@ handle_path /mcp-direct/* {
         header_up X-Forwarded-For {remote}
         header_up X-Forwarded-Proto {scheme}
         
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+        
         # SSE 支持（Server-Sent Events）
         header_up Connection ""
         header_up Cache-Control "no-cache"
@@ -142,18 +272,63 @@ handle_path /mcp-direct/* {
             response_header_timeout 300s
         }
     }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
 }
 
-# MCP Direct 健康检查（去除 /mcp-direct/ 前缀）
+# MCP Direct 健康检查
 handle /mcp-direct/health {
     rewrite * /health
-    reverse_proxy cognee-mcp-direct:8000
+    reverse_proxy cognee-mcp-direct:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+    }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
 }
 
 # ==================== 前端服务 ====================
 # 路径: / -> cognee-frontend:3000
 # 注意：这个 handle 必须在最后，因为 Caddy 按顺序匹配
 # 精确匹配和前缀匹配（/api/, /mcp-api/）会优先于这个通用匹配
+
+# Next.js WebSocket HMR 路径（/_next/webpack-hmr）
+# 必须明确处理此路径，否则 WebSocket 连接会失败
+handle /_next/webpack-hmr* {
+    reverse_proxy cognee-frontend:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-Host {host}
+        header_up X-Forwarded-Port {port}
+        
+        # WebSocket 升级（必须明确传递）
+        header_up Connection {>Connection}
+        header_up Upgrade {>Upgrade}
+    }
+}
+
+# 处理所有其他前端请求（包括普通 HTTP 和页面）
 handle {
     reverse_proxy cognee-frontend:3000 {
         header_up Host {host}
@@ -161,7 +336,11 @@ handle {
         header_up X-Forwarded-For {remote}
         header_up X-Forwarded-Proto {scheme}
         
-        # WebSocket 支持（Next.js 可能需要）
+        # Next.js 特定配置
+        header_up X-Forwarded-Host {host}
+        header_up X-Forwarded-Port {port}
+        
+        # WebSocket 支持（Caddy 会自动检测，但明确传递更安全）
         header_up Connection {>Connection}
         header_up Upgrade {>Upgrade}
         
@@ -172,4 +351,3 @@ handle {
         }
     }
 }
-

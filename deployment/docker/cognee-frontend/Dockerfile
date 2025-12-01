@@ -19,6 +19,12 @@ COPY project/cognee/cognee-frontend/public ./public
 COPY deployment/docker/cognee-frontend/patches/next.config.mjs ./next.config.mjs
 # Apply CozyCognee patches: 使用补丁版本的 InstanceDatasetsAccordion.tsx 来禁用自动 cloud 连接检测
 COPY deployment/docker/cognee-frontend/patches/InstanceDatasetsAccordion.tsx ./src/app/dashboard/InstanceDatasetsAccordion.tsx
+# Apply CozyCognee patches: 使用补丁版本的 Header.tsx 来删除 Sync 按钮、Premium 链接和 API keys 链接
+COPY deployment/docker/cognee-frontend/patches/Header.tsx ./src/ui/Layout/Header.tsx
+# Apply CozyCognee patches: 使用补丁版本的 Dashboard.tsx 来删除 "Select a plan" 按钮
+COPY deployment/docker/cognee-frontend/patches/Dashboard.tsx ./src/app/dashboard/Dashboard.tsx
+# Apply CozyCognee patches: 使用补丁版本的 Account.tsx 来删除 "Select a plan" 按钮
+COPY deployment/docker/cognee-frontend/patches/Account.tsx ./src/app/account/Account.tsx
 COPY project/cognee/cognee-frontend/postcss.config.mjs .
 COPY project/cognee/cognee-frontend/tsconfig.json .
 

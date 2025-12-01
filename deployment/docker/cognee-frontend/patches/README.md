@@ -52,12 +52,66 @@
 - 禁用自动检测后，用户仍可以手动点击连接 cloud
 - 此补丁仅影响自动检测，不影响手动连接功能
 
+### `Header.tsx`
+
+**修改内容**: 删除 Sync 按钮、Premium 链接和 API keys 链接
+
+**修改原因**: 在本地部署时，这些功能通常不需要，删除它们可以简化用户界面。
+
+**删除的元素**:
+- Sync 按钮及其相关的同步模态框
+- Premium 链接（指向 `/plan`）
+- API keys 链接（指向 `https://platform.cognee.ai`）
+
+**使用方法**: 
+- 补丁在 Dockerfile 构建时自动应用
+- 无需额外配置
+
+**注意事项**: 
+- 删除 Sync 按钮后，用户无法通过 UI 同步本地数据集到云端
+- 删除 Premium 和 API keys 链接后，用户需要通过其他方式访问这些功能
+
+### `Dashboard.tsx`
+
+**修改内容**: 删除 "Select a plan" 按钮
+
+**修改原因**: 在本地部署时，通常不需要显示选择计划的按钮，删除它可以简化用户界面。
+
+**删除的元素**:
+- 位于左侧边栏底部的 "Select a plan" 按钮
+
+**使用方法**: 
+- 补丁在 Dockerfile 构建时自动应用
+- 无需额外配置
+
+**注意事项**: 
+- 删除后，用户无法从 Dashboard 页面直接跳转到计划选择页面
+
+### `Account.tsx`
+
+**修改内容**: 删除 "Select a plan" 按钮
+
+**修改原因**: 在本地部署时，通常不需要显示选择计划的按钮，删除它可以简化用户界面。
+
+**删除的元素**:
+- 位于账户页面 Plan 部分的 "Select a plan" 按钮
+
+**使用方法**: 
+- 补丁在 Dockerfile 构建时自动应用
+- 无需额外配置
+
+**注意事项**: 
+- 删除后，用户无法从 Account 页面直接跳转到计划选择页面
+
 ## 目录结构
 
 ```
 patches/
 ├── next.config.mjs  # Next.js 配置补丁
-└── InstanceDatasetsAccordion.tsx  # 禁用 cloud 连接自动检测补丁
+├── InstanceDatasetsAccordion.tsx  # 禁用 cloud 连接自动检测补丁
+├── Header.tsx  # 删除 Sync 按钮、Premium 链接和 API keys 链接补丁
+├── Dashboard.tsx  # 删除 "Select a plan" 按钮补丁
+└── Account.tsx  # 删除 "Select a plan" 按钮补丁
 ```
 
 ## 应用补丁
@@ -69,6 +123,12 @@ patches/
 COPY deployment/docker/cognee-frontend/patches/next.config.mjs ./next.config.mjs
 # Apply CozyCognee patches: 使用补丁版本的 InstanceDatasetsAccordion.tsx 来禁用自动 cloud 连接检测
 COPY deployment/docker/cognee-frontend/patches/InstanceDatasetsAccordion.tsx ./src/app/dashboard/InstanceDatasetsAccordion.tsx
+# Apply CozyCognee patches: 使用补丁版本的 Header.tsx 来删除 Sync 按钮、Premium 链接和 API keys 链接
+COPY deployment/docker/cognee-frontend/patches/Header.tsx ./src/ui/Layout/Header.tsx
+# Apply CozyCognee patches: 使用补丁版本的 Dashboard.tsx 来删除 "Select a plan" 按钮
+COPY deployment/docker/cognee-frontend/patches/Dashboard.tsx ./src/app/dashboard/Dashboard.tsx
+# Apply CozyCognee patches: 使用补丁版本的 Account.tsx 来删除 "Select a plan" 按钮
+COPY deployment/docker/cognee-frontend/patches/Account.tsx ./src/app/account/Account.tsx
 ```
 
 ## 维护说明
