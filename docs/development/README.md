@@ -17,6 +17,8 @@
 - [本地开发配置指南](./LOCAL_DEV_SETUP.md) - 详细的本地开发环境配置步骤
 - [快速启动指南](./QUICK_START_COGNEE.md) - 快速启动 Cognee 后端
 - [CORS 跨域问题排查](./CORS_LOCAL_DEV.md) - 本地开发时的 CORS 问题解决方案
+- [SDK 开发可行性分析](./SDK_FEASIBILITY_ANALYSIS.md) - Cognee SDK 开发的可行性分析和性能评估
+- [SDK 开发设计文档与工作量评估](./SDK_DESIGN_AND_WORKLOAD.md) - 详细的 SDK 架构设计、实现方案和工作量评估
 
 ## 开发环境设置
 
