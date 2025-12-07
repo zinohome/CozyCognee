@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SearchType(str, Enum):
@@ -54,9 +54,11 @@ class Dataset(BaseModel):
 
     id: UUID = Field(..., description="Dataset ID")
     name: str = Field(..., description="Dataset name")
-    created_at: datetime = Field(..., description="Dataset creation timestamp")
-    updated_at: datetime | None = Field(None, description="Last update timestamp")
-    owner_id: UUID = Field(..., description="Dataset owner ID")
+    created_at: datetime | None = Field(None, alias="createdAt", description="Dataset creation timestamp")
+    updated_at: datetime | None = Field(None, alias="updatedAt", description="Last update timestamp")
+    owner_id: UUID | None = Field(None, alias="ownerId", description="Dataset owner ID")
+    
+    model_config = ConfigDict(populate_by_name=True)  # Allow both snake_case and camelCase
 
 
 class DataItem(BaseModel):
@@ -64,21 +66,45 @@ class DataItem(BaseModel):
 
     id: UUID = Field(..., description="Data item ID")
     name: str = Field(..., description="Data item name")
-    created_at: datetime = Field(..., description="Creation timestamp")
-    updated_at: datetime | None = Field(None, description="Last update timestamp")
-    extension: str = Field(..., description="File extension")
-    mime_type: str = Field(..., description="MIME type")
-    raw_data_location: str = Field(..., description="Raw data storage location")
-    dataset_id: UUID = Field(..., description="Dataset ID")
+    created_at: datetime | None = Field(None, alias="createdAt", description="Creation timestamp")
+    updated_at: datetime | None = Field(None, alias="updatedAt", description="Last update timestamp")
+    extension: str | None = Field(None, description="File extension")
+    mime_type: str | None = Field(None, alias="mimeType", description="MIME type")
+    raw_data_location: str | None = Field(None, alias="rawDataLocation", description="Raw data storage location")
+    dataset_id: UUID | None = Field(None, alias="datasetId", description="Dataset ID")
+    
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class AddResult(BaseModel):
     """Result model for add operation."""
 
     status: str = Field(..., description="Operation status")
-    message: str = Field(..., description="Status message")
+    message: str | None = Field(None, description="Status message")
     data_id: UUID | None = Field(None, description="Created data ID")
     dataset_id: UUID | None = Field(None, description="Dataset ID")
+    pipeline_run_id: UUID | None = Field(None, alias="pipeline_run_id", description="Pipeline run ID")
+    dataset_name: str | None = Field(None, alias="dataset_name", description="Dataset name")
+    data_ingestion_info: list[dict[str, Any]] | None = Field(None, alias="data_ingestion_info", description="Data ingestion information")
+    
+    model_config = ConfigDict(populate_by_name=True)
+    
+    def __init__(self, **data):
+        """Initialize AddResult, extracting data_id from data_ingestion_info if needed."""
+        # Extract data_id from data_ingestion_info if present
+        if "data_ingestion_info" in data and data["data_ingestion_info"]:
+            ingestion_info = data["data_ingestion_info"]
+            if isinstance(ingestion_info, list) and len(ingestion_info) > 0:
+                first_info = ingestion_info[0]
+                if isinstance(first_info, dict) and "data_id" in first_info:
+                    if "data_id" not in data or data["data_id"] is None:
+                        data["data_id"] = first_info["data_id"]
+        
+        # Set default message if not provided
+        if "message" not in data or data["message"] is None:
+            data["message"] = f"Data added successfully. Status: {data.get('status', 'unknown')}"
+        
+        super().__init__(**data)
 
 
 class DeleteResult(BaseModel):
@@ -128,8 +154,7 @@ class SearchResult(BaseModel):
     metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
 
     # Allow additional fields
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class CombinedSearchResult(BaseModel):

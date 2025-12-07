@@ -188,6 +188,29 @@ handle /health {
     }
 }
 
+# Cognee 详细健康检查
+handle /health/detailed {
+    reverse_proxy cognee:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        
+        # 隐藏后端返回的 CORS 头，避免重复
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Allow-Credentials
+    }
+    
+    # 添加 CORS 头
+    header {
+        Access-Control-Allow-Origin "*"
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+        Access-Control-Allow-Credentials "true"
+    }
+}
+
 # ==================== Cognee MCP API Mode ====================
 # 路径: /mcp-api/* -> cognee-mcp-api:8000/* (去除 /mcp-api/ 前缀)
 handle_path /mcp-api/* {

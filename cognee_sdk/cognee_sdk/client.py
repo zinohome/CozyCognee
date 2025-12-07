@@ -142,6 +142,7 @@ class CogneeClient:
                 error_data.get("error")
                 or error_data.get("detail")
                 or error_data.get("message")
+                or str(error_data)  # Show full error data if available
                 or response.text
             )
         except Exception:
@@ -183,7 +184,16 @@ class CogneeClient:
         """
         url = f"{self.api_url}{endpoint}"
         headers = kwargs.pop("headers", {})
-        base_headers = self._get_headers()
+        
+        # For multipart/form-data requests, don't set Content-Type header
+        # Let httpx set it automatically with boundary
+        if "files" in kwargs:
+            # Only set Authorization header for multipart requests
+            base_headers = {}
+            if self.api_token:
+                base_headers["Authorization"] = f"Bearer {self.api_token}"
+        else:
+            base_headers = self._get_headers()
 
         # Merge headers, custom headers take precedence
         merged_headers = {**base_headers, **headers}

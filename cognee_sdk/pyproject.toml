@@ -113,6 +113,9 @@ addopts = [
     "--cov-report=html",
     "--cov-fail-under=80",
 ]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
 
 [tool.coverage.run]
 source = ["cognee_sdk"]

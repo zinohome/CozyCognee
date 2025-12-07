@@ -16,6 +16,7 @@
 
 - [SDK 快速使用指南](./SDK_QUICK_START.md) - Cognee SDK 的快速入门和使用指南 ⭐
 - [SDK 测试指南](./SDK_TESTING.md) - Cognee SDK 的测试方法和编写指南
+- [SDK 测试覆盖率分析](./SDK_TEST_COVERAGE_ANALYSIS.md) - 未覆盖功能的详细分析
 - [SDK 发布指南](./SDK_PUBLISH.md) - 如何将 SDK 发布到 PyPI
 - [本地开发配置指南](./LOCAL_DEV_SETUP.md) - 详细的本地开发环境配置步骤
 - [快速启动指南](./QUICK_START_COGNEE.md) - 快速启动 Cognee 后端
