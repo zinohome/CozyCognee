@@ -4,13 +4,14 @@ Comprehensive unit tests for search functionality.
 Tests all search types, return types, and parameter combinations.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import pytest
+
 from cognee_sdk import CogneeClient, SearchType
 from cognee_sdk.exceptions import ValidationError
-from cognee_sdk.models import SearchResult, CombinedSearchResult
+from cognee_sdk.models import CombinedSearchResult, SearchResult
 
 
 @pytest.fixture
@@ -374,9 +375,6 @@ class TestSearchValidation:
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
-            results = await client.search(
-                query="   ", search_type=SearchType.GRAPH_COMPLETION
-            )
+            results = await client.search(query="   ", search_type=SearchType.GRAPH_COMPLETION)
 
             assert isinstance(results, list)
-

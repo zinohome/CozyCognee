@@ -4,22 +4,21 @@ Unit tests for CogneeClient.
 Tests core functionality using mocked HTTP requests.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient, SearchType
 from cognee_sdk.exceptions import (
     AuthenticationError,
     NotFoundError,
-    ValidationError,
     ServerError,
+    ValidationError,
 )
 from cognee_sdk.models import (
     AddResult,
     Dataset,
-    CognifyResult,
-    SearchResult,
     DeleteResult,
 )
 
@@ -338,4 +337,3 @@ async def test_context_manager_with_exception(client):
             pass
         # Client should still be closed even if exception occurs
         mock_close.assert_called_once()
-

@@ -7,8 +7,9 @@ Main client class for interacting with Cognee API server.
 import asyncio
 import json
 import mimetypes
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator, BinaryIO, Dict, List, Optional, Union
+from typing import Any, BinaryIO
 from uuid import UUID
 
 import httpx
@@ -74,7 +75,7 @@ class CogneeClient:
     def __init__(
         self,
         api_url: str,
-        api_token: Optional[str] = None,
+        api_token: str | None = None,
         timeout: float = 300.0,
         max_retries: int = 3,
         retry_delay: float = 1.0,
@@ -105,7 +106,7 @@ class CogneeClient:
             follow_redirects=True,
         )
 
-    def _get_headers(self, content_type: str = "application/json") -> Dict[str, str]:
+    def _get_headers(self, content_type: str = "application/json") -> dict[str, str]:
         """
         Get request headers with authentication.
 
@@ -115,7 +116,7 @@ class CogneeClient:
         Returns:
             Dictionary of headers
         """
-        headers: Dict[str, str] = {"Content-Type": content_type}
+        headers: dict[str, str] = {"Content-Type": content_type}
         if self.api_token:
             headers["Authorization"] = f"Bearer {self.api_token}"
         return headers
@@ -134,7 +135,7 @@ class CogneeClient:
             ServerError: For 5xx status codes
             CogneeAPIError: For other error status codes
         """
-        error_data: Optional[dict] = None
+        error_data: dict | None = None
         try:
             error_data = response.json()
             error_message = (
@@ -187,7 +188,7 @@ class CogneeClient:
         # Merge headers, custom headers take precedence
         merged_headers = {**base_headers, **headers}
 
-        last_exception: Optional[Exception] = None
+        last_exception: Exception | None = None
         for attempt in range(self.max_retries):
             try:
                 response = await self.client.request(
@@ -206,16 +207,14 @@ class CogneeClient:
             except httpx.TimeoutException as e:
                 last_exception = e
                 if attempt < self.max_retries - 1:
-                    await asyncio.sleep(self.retry_delay * (2 ** attempt))  # Exponential backoff
+                    await asyncio.sleep(self.retry_delay * (2**attempt))  # Exponential backoff
                 else:
-                    raise TimeoutError(
-                        f"Request timeout after {self.max_retries} attempts"
-                    ) from e
+                    raise TimeoutError(f"Request timeout after {self.max_retries} attempts") from e
 
             except httpx.RequestError as e:
                 last_exception = e
                 if attempt < self.max_retries - 1:
-                    await asyncio.sleep(self.retry_delay * (2 ** attempt))
+                    await asyncio.sleep(self.retry_delay * (2**attempt))
                 else:
                     raise CogneeSDKError(f"Request failed: {str(e)}") from e
 
@@ -253,10 +252,10 @@ class CogneeClient:
 
     async def add(
         self,
-        data: Union[str, bytes, Path, BinaryIO, List[Union[str, bytes, Path, BinaryIO]]],
-        dataset_name: Optional[str] = None,
-        dataset_id: Optional[UUID] = None,
-        node_set: Optional[List[str]] = None,
+        data: str | bytes | Path | BinaryIO | list[str | bytes | Path | BinaryIO],
+        dataset_name: str | None = None,
+        dataset_id: UUID | None = None,
+        node_set: list[str] | None = None,
     ) -> AddResult:
         """
         Add data to Cognee for processing.
@@ -308,7 +307,7 @@ class CogneeClient:
             data_list = data
 
         # Prepare files for multipart/form-data
-        files: List[tuple] = []
+        files: list[tuple] = []
         for item in data_list:
             if isinstance(item, str):
                 # Check if it's a file path
@@ -329,8 +328,10 @@ class CogneeClient:
                                     ),
                                 )
                             )
-                        except (IOError, OSError) as e:
-                            raise CogneeSDKError(f"Failed to read file {file_path}: {str(e)}") from e
+                        except OSError as e:
+                            raise CogneeSDKError(
+                                f"Failed to read file {file_path}: {str(e)}"
+                            ) from e
                     else:
                         # Treat as text string
                         files.append(("data", ("data.txt", item.encode("utf-8"), "text/plain")))
@@ -350,7 +351,7 @@ class CogneeClient:
                             (item.name, file_content, mime_type or "application/octet-stream"),
                         )
                     )
-                except (IOError, OSError) as e:
+                except OSError as e:
                     raise CogneeSDKError(f"Failed to read file {item}: {str(e)}") from e
             elif hasattr(item, "read"):
                 # File-like object
@@ -365,12 +366,10 @@ class CogneeClient:
                 )
             else:
                 # Fallback: convert to string
-                files.append(
-                    ("data", ("data.txt", str(item).encode("utf-8"), "text/plain"))
-                )
+                files.append(("data", ("data.txt", str(item).encode("utf-8"), "text/plain")))
 
         # Prepare form data
-        form_data: Dict[str, Any] = {}
+        form_data: dict[str, Any] = {}
         if dataset_name:
             form_data["datasetName"] = dataset_name
         if dataset_id:
@@ -423,11 +422,11 @@ class CogneeClient:
 
     async def cognify(
         self,
-        datasets: Optional[List[str]] = None,
-        dataset_ids: Optional[List[UUID]] = None,
+        datasets: list[str] | None = None,
+        dataset_ids: list[UUID] | None = None,
         run_in_background: bool = False,
-        custom_prompt: Optional[str] = None,
-    ) -> Dict[str, CognifyResult]:
+        custom_prompt: str | None = None,
+    ) -> dict[str, CognifyResult]:
         """
         Transform datasets into structured knowledge graphs.
 
@@ -456,7 +455,7 @@ class CogneeClient:
                 400,
             )
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "run_in_background": run_in_background,
         }
         if datasets:
@@ -487,14 +486,14 @@ class CogneeClient:
         self,
         query: str,
         search_type: SearchType = SearchType.GRAPH_COMPLETION,
-        datasets: Optional[List[str]] = None,
-        dataset_ids: Optional[List[UUID]] = None,
-        system_prompt: Optional[str] = None,
-        node_name: Optional[List[str]] = None,
+        datasets: list[str] | None = None,
+        dataset_ids: list[UUID] | None = None,
+        system_prompt: str | None = None,
+        node_name: list[str] | None = None,
         top_k: int = 10,
         only_context: bool = False,
         use_combined_context: bool = False,
-    ) -> Union[List[SearchResult], CombinedSearchResult, List[Dict[str, Any]]]:
+    ) -> list[SearchResult] | CombinedSearchResult | list[dict[str, Any]]:
         """
         Search the knowledge graph.
 
@@ -529,7 +528,7 @@ class CogneeClient:
         if not query:
             raise ValidationError("Query cannot be empty", 400)
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "query": query,
             "search_type": search_type.value,
             "top_k": top_k,
@@ -554,14 +553,16 @@ class CogneeClient:
         elif isinstance(result_data, list):
             # Try to parse as SearchResult objects
             try:
-                return [SearchResult(**item) if isinstance(item, dict) else item for item in result_data]
+                return [
+                    SearchResult(**item) if isinstance(item, dict) else item for item in result_data
+                ]
             except Exception:
                 # Return raw data if parsing fails
                 return result_data
         else:
             return result_data
 
-    async def list_datasets(self) -> List[Dataset]:
+    async def list_datasets(self) -> list[Dataset]:
         """
         Get all datasets accessible to the authenticated user.
 
@@ -608,8 +609,8 @@ class CogneeClient:
         self,
         data_id: UUID,
         dataset_id: UUID,
-        data: Union[str, bytes, Path, BinaryIO],
-        node_set: Optional[List[str]] = None,
+        data: str | bytes | Path | BinaryIO,
+        node_set: list[str] | None = None,
     ) -> UpdateResult:
         """
         Update existing data in a dataset.
@@ -628,7 +629,7 @@ class CogneeClient:
             ValidationError: If invalid parameters provided
         """
         # Prepare file for upload
-        files: List[tuple] = []
+        files: list[tuple] = []
         if isinstance(data, str):
             if data.startswith(("/", "file://")):
                 file_path = Path(data.replace("file://", ""))
@@ -647,7 +648,7 @@ class CogneeClient:
                                 ),
                             )
                         )
-                    except (IOError, OSError) as e:
+                    except OSError as e:
                         raise CogneeSDKError(f"Failed to read file {file_path}: {str(e)}") from e
                 else:
                     files.append(("data", ("data.txt", data.encode("utf-8"), "text/plain")))
@@ -663,19 +664,17 @@ class CogneeClient:
                 files.append(
                     ("data", (data.name, file_content, mime_type or "application/octet-stream"))
                 )
-            except (IOError, OSError) as e:
+            except OSError as e:
                 raise CogneeSDKError(f"Failed to read file {data}: {str(e)}") from e
         elif hasattr(data, "read"):
             file_name = getattr(data, "name", "data.bin")
             content = data.read() if hasattr(data, "read") else data
             mime_type, _ = mimetypes.guess_type(file_name)
-            files.append(
-                ("data", (file_name, content, mime_type or "application/octet-stream"))
-            )
+            files.append(("data", (file_name, content, mime_type or "application/octet-stream")))
         else:
             files.append(("data", ("data.txt", str(data).encode("utf-8"), "text/plain")))
 
-        form_data: Dict[str, Any] = {}
+        form_data: dict[str, Any] = {}
         if node_set:
             form_data["node_set"] = json.dumps(node_set)
 
@@ -712,7 +711,7 @@ class CogneeClient:
         """
         await self._request("DELETE", f"/api/v1/datasets/{dataset_id}")
 
-    async def get_dataset_data(self, dataset_id: UUID) -> List[DataItem]:
+    async def get_dataset_data(self, dataset_id: UUID) -> list[DataItem]:
         """
         Get all data items in a dataset.
 
@@ -748,9 +747,7 @@ class CogneeClient:
         result_data = response.json()
         return GraphData(**result_data)
 
-    async def get_dataset_status(
-        self, dataset_ids: List[UUID]
-    ) -> Dict[UUID, PipelineRunStatus]:
+    async def get_dataset_status(self, dataset_ids: list[UUID]) -> dict[UUID, PipelineRunStatus]:
         """
         Get the processing status of datasets.
 
@@ -790,9 +787,7 @@ class CogneeClient:
         Raises:
             NotFoundError: If data or dataset not found
         """
-        response = await self._request(
-            "GET", f"/api/v1/datasets/{dataset_id}/data/{data_id}/raw"
-        )
+        response = await self._request("GET", f"/api/v1/datasets/{dataset_id}/data/{data_id}/raw")
         return response.content
 
     # ==================== Authentication API (P1) ====================
@@ -867,12 +862,12 @@ class CogneeClient:
 
     async def memify(
         self,
-        dataset_name: Optional[str] = None,
-        dataset_id: Optional[UUID] = None,
-        extraction_tasks: Optional[List[str]] = None,
-        enrichment_tasks: Optional[List[str]] = None,
-        data: Optional[str] = None,
-        node_name: Optional[List[str]] = None,
+        dataset_name: str | None = None,
+        dataset_id: UUID | None = None,
+        extraction_tasks: list[str] | None = None,
+        enrichment_tasks: list[str] | None = None,
+        data: str | None = None,
+        node_name: list[str] | None = None,
         run_in_background: bool = False,
     ) -> MemifyResult:
         """
@@ -899,7 +894,7 @@ class CogneeClient:
                 400,
             )
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "run_in_background": run_in_background,
         }
         if dataset_name:
@@ -919,7 +914,7 @@ class CogneeClient:
         result_data = response.json()
         return MemifyResult(**result_data)
 
-    async def get_search_history(self) -> List[SearchHistoryItem]:
+    async def get_search_history(self) -> list[SearchHistoryItem]:
         """
         Get search history for the authenticated user.
 
@@ -948,14 +943,14 @@ class CogneeClient:
         Raises:
             NotFoundError: If dataset not found
         """
-        response = await self._request("GET", "/api/v1/visualize", params={"dataset_id": str(dataset_id)})
+        response = await self._request(
+            "GET", "/api/v1/visualize", params={"dataset_id": str(dataset_id)}
+        )
         return response.text
 
     # ==================== Sync API (P2) ====================
 
-    async def sync_to_cloud(
-        self, dataset_ids: Optional[List[UUID]] = None
-    ) -> SyncResult:
+    async def sync_to_cloud(self, dataset_ids: list[UUID] | None = None) -> SyncResult:
         """
         Sync local data to Cognee Cloud.
 
@@ -968,7 +963,7 @@ class CogneeClient:
         Raises:
             ServerError: If sync fails
         """
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if dataset_ids:
             payload["dataset_ids"] = [str(did) for did in dataset_ids]
 
@@ -999,7 +994,7 @@ class CogneeClient:
 
     async def subscribe_cognify_progress(
         self, pipeline_run_id: UUID
-    ) -> "AsyncIterator[Dict[str, Any]]":
+    ) -> "AsyncIterator[dict[str, Any]]":
         """
         Subscribe to Cognify processing progress via WebSocket.
 
@@ -1022,18 +1017,18 @@ class CogneeClient:
         """
         try:
             import websockets
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "websockets package is required for WebSocket support. "
                 "Install it with: pip install cognee-sdk[websocket]"
-            )
+            ) from err
 
         # Convert HTTP URL to WebSocket URL
         ws_url = self.api_url.replace("http://", "ws://").replace("https://", "wss://")
         endpoint = f"/api/v1/cognify/subscribe/{pipeline_run_id}"
 
         # Prepare headers
-        headers: Dict[str, str] = {}
+        headers: dict[str, str] = {}
         if self.api_token:
             headers["Authorization"] = f"Bearer {self.api_token}"
 
@@ -1060,11 +1055,11 @@ class CogneeClient:
 
     async def add_batch(
         self,
-        data_list: List[Union[str, bytes, Path, BinaryIO]],
-        dataset_name: Optional[str] = None,
-        dataset_id: Optional[UUID] = None,
-        node_set: Optional[List[str]] = None,
-    ) -> List[AddResult]:
+        data_list: list[str | bytes | Path | BinaryIO],
+        dataset_name: str | None = None,
+        dataset_id: UUID | None = None,
+        node_set: list[str] | None = None,
+    ) -> list[AddResult]:
         """
         Add multiple data items in batch.
 
@@ -1093,4 +1088,3 @@ class CogneeClient:
             for item in data_list
         ]
         return await asyncio.gather(*tasks)
-

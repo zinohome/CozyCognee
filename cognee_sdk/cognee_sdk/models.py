@@ -4,10 +4,10 @@ Data models for Cognee SDK.
 All models use Pydantic BaseModel for type validation and serialization.
 """
 
-from enum import Enum
-from typing import Any, Dict, List, Optional
-from uuid import UUID
 from datetime import datetime
+from enum import Enum
+from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -46,7 +46,7 @@ class User(BaseModel):
 
     id: UUID = Field(..., description="User ID")
     email: str = Field(..., description="User email address")
-    created_at: Optional[datetime] = Field(None, description="Account creation timestamp")
+    created_at: datetime | None = Field(None, description="Account creation timestamp")
 
 
 class Dataset(BaseModel):
@@ -55,7 +55,7 @@ class Dataset(BaseModel):
     id: UUID = Field(..., description="Dataset ID")
     name: str = Field(..., description="Dataset name")
     created_at: datetime = Field(..., description="Dataset creation timestamp")
-    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+    updated_at: datetime | None = Field(None, description="Last update timestamp")
     owner_id: UUID = Field(..., description="Dataset owner ID")
 
 
@@ -65,7 +65,7 @@ class DataItem(BaseModel):
     id: UUID = Field(..., description="Data item ID")
     name: str = Field(..., description="Data item name")
     created_at: datetime = Field(..., description="Creation timestamp")
-    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+    updated_at: datetime | None = Field(None, description="Last update timestamp")
     extension: str = Field(..., description="File extension")
     mime_type: str = Field(..., description="MIME type")
     raw_data_location: str = Field(..., description="Raw data storage location")
@@ -77,8 +77,8 @@ class AddResult(BaseModel):
 
     status: str = Field(..., description="Operation status")
     message: str = Field(..., description="Status message")
-    data_id: Optional[UUID] = Field(None, description="Created data ID")
-    dataset_id: Optional[UUID] = Field(None, description="Dataset ID")
+    data_id: UUID | None = Field(None, description="Created data ID")
+    dataset_id: UUID | None = Field(None, description="Dataset ID")
 
 
 class DeleteResult(BaseModel):
@@ -93,9 +93,9 @@ class CognifyResult(BaseModel):
 
     pipeline_run_id: UUID = Field(..., description="Pipeline run ID")
     status: str = Field(..., description="Pipeline status")
-    entity_count: Optional[int] = Field(None, description="Number of entities extracted")
-    duration: Optional[float] = Field(None, description="Processing duration in seconds")
-    message: Optional[str] = Field(None, description="Status message")
+    entity_count: int | None = Field(None, description="Number of entities extracted")
+    duration: float | None = Field(None, description="Processing duration in seconds")
+    message: str | None = Field(None, description="Status message")
 
 
 class MemifyResult(BaseModel):
@@ -103,7 +103,7 @@ class MemifyResult(BaseModel):
 
     pipeline_run_id: UUID = Field(..., description="Pipeline run ID")
     status: str = Field(..., description="Pipeline status")
-    message: Optional[str] = Field(None, description="Status message")
+    message: str | None = Field(None, description="Status message")
 
 
 class UpdateResult(BaseModel):
@@ -111,7 +111,7 @@ class UpdateResult(BaseModel):
 
     status: str = Field(..., description="Operation status")
     message: str = Field(..., description="Status message")
-    data_id: Optional[UUID] = Field(None, description="Updated data ID")
+    data_id: UUID | None = Field(None, description="Updated data ID")
 
 
 class SearchResult(BaseModel):
@@ -122,10 +122,10 @@ class SearchResult(BaseModel):
     """
 
     # Common fields that appear in most search results
-    id: Optional[str] = Field(None, description="Result ID")
-    text: Optional[str] = Field(None, description="Result text content")
-    score: Optional[float] = Field(None, description="Relevance score")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    id: str | None = Field(None, description="Result ID")
+    text: str | None = Field(None, description="Result text content")
+    score: float | None = Field(None, description="Relevance score")
+    metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
 
     # Allow additional fields
     class Config:
@@ -136,8 +136,8 @@ class CombinedSearchResult(BaseModel):
     """Combined search result model."""
 
     result: str = Field(..., description="Combined result text")
-    context: Optional[List[str]] = Field(None, description="Context chunks")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    context: list[str] | None = Field(None, description="Context chunks")
+    metadata: dict[str, Any] | None = Field(None, description="Additional metadata")
 
 
 class SearchHistoryItem(BaseModel):
@@ -154,7 +154,7 @@ class GraphNode(BaseModel):
 
     id: UUID = Field(..., description="Node ID")
     label: str = Field(..., description="Node label")
-    properties: Dict[str, Any] = Field(default_factory=dict, description="Node properties")
+    properties: dict[str, Any] = Field(default_factory=dict, description="Node properties")
 
 
 class GraphEdge(BaseModel):
@@ -168,8 +168,8 @@ class GraphEdge(BaseModel):
 class GraphData(BaseModel):
     """Graph data model."""
 
-    nodes: List[GraphNode] = Field(..., description="List of graph nodes")
-    edges: List[GraphEdge] = Field(..., description="List of graph edges")
+    nodes: list[GraphNode] = Field(..., description="List of graph nodes")
+    edges: list[GraphEdge] = Field(..., description="List of graph edges")
 
 
 class SyncResult(BaseModel):
@@ -177,11 +177,11 @@ class SyncResult(BaseModel):
 
     run_id: str = Field(..., description="Sync operation run ID")
     status: str = Field(..., description="Sync status")
-    dataset_ids: List[UUID] = Field(..., description="Dataset IDs being synced")
-    dataset_names: List[str] = Field(..., description="Dataset names being synced")
+    dataset_ids: list[UUID] = Field(..., description="Dataset IDs being synced")
+    dataset_names: list[str] = Field(..., description="Dataset names being synced")
     message: str = Field(..., description="Status message")
-    timestamp: Optional[datetime] = Field(None, description="Sync initiation timestamp")
-    user_id: Optional[UUID] = Field(None, description="User ID who initiated sync")
+    timestamp: datetime | None = Field(None, description="Sync initiation timestamp")
+    user_id: UUID | None = Field(None, description="User ID who initiated sync")
 
 
 class SyncStatus(BaseModel):
@@ -189,7 +189,7 @@ class SyncStatus(BaseModel):
 
     has_running_sync: bool = Field(..., description="Whether there are running syncs")
     running_sync_count: int = Field(..., description="Number of running sync operations")
-    latest_running_sync: Optional[Dict[str, Any]] = Field(
+    latest_running_sync: dict[str, Any] | None = Field(
         None, description="Information about the latest running sync"
     )
 
@@ -198,5 +198,4 @@ class HealthStatus(BaseModel):
     """Health check status model."""
 
     status: str = Field(..., description="Health status")
-    version: Optional[str] = Field(None, description="API version")
-
+    version: str | None = Field(None, description="API version")

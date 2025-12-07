@@ -4,9 +4,10 @@ Comprehensive unit tests for cognify functionality.
 Tests various parameter combinations and edge cases.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient
 from cognee_sdk.exceptions import ValidationError
@@ -82,9 +83,7 @@ class TestCognifyParameters:
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
-            result = await client.cognify(
-                datasets=["dataset1"], dataset_ids=[dataset_id]
-            )
+            result = await client.cognify(datasets=["dataset1"], dataset_ids=[dataset_id])
 
             assert isinstance(result, dict)
             call_args = mock_request.call_args
@@ -139,9 +138,7 @@ class TestCognifyParameters:
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
-            await client.cognify(
-                datasets=["dataset1"], custom_prompt=custom_prompt
-            )
+            await client.cognify(datasets=["dataset1"], custom_prompt=custom_prompt)
 
             call_args = mock_request.call_args
             payload = call_args[1]["json"]
@@ -294,9 +291,7 @@ class TestCognifyMultipleDatasets:
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
-            result = await client.cognify(
-                datasets=["dataset1", "dataset2", "dataset3"]
-            )
+            result = await client.cognify(datasets=["dataset1", "dataset2", "dataset3"])
 
             assert isinstance(result, dict)
             call_args = mock_request.call_args
@@ -322,4 +317,3 @@ class TestCognifyMultipleDatasets:
             call_args = mock_request.call_args
             payload = call_args[1]["json"]
             assert len(payload["dataset_ids"]) == 3
-

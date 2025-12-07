@@ -5,9 +5,12 @@ Note: WebSocket tests are simplified due to the complexity of mocking
 the websockets library which is imported inside the method.
 """
 
-import pytest
+import json
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient
 from cognee_sdk.exceptions import ServerError
@@ -60,16 +63,18 @@ async def test_subscribe_cognify_progress_connection_closed(client):
     mock_websocket.__aenter__ = AsyncMock(return_value=mock_websocket)
     mock_websocket.__aexit__ = AsyncMock(return_value=None)
     mock_websocket.recv = AsyncMock(side_effect=Exception("Connection closed"))
-    
+
     mock_websockets_module.connect = AsyncMock(return_value=mock_websocket)
     mock_websockets_module.exceptions = MagicMock()
     mock_websockets_module.exceptions.ConnectionClosed = Exception
 
     with patch.dict(sys.modules, {"websockets": mock_websockets_module}):
         import importlib
+
         import cognee_sdk.client
+
         importlib.reload(cognee_sdk.client)
-        
+
         updates = []
         try:
             async for update in client.subscribe_cognify_progress(pipeline_run_id):
@@ -96,16 +101,18 @@ async def test_subscribe_cognify_progress_failed_status(client):
             json.dumps({"status": "failed", "error": "Processing failed"}),
         ]
     )
-    
+
     mock_websockets_module.connect = AsyncMock(return_value=mock_websocket)
     mock_websockets_module.exceptions = MagicMock()
     mock_websockets_module.exceptions.ConnectionClosed = Exception
 
     with patch.dict(sys.modules, {"websockets": mock_websockets_module}):
         import importlib
+
         import cognee_sdk.client
+
         importlib.reload(cognee_sdk.client)
-        
+
         updates = []
         async for update in client.subscribe_cognify_progress(pipeline_run_id):
             updates.append(update)
@@ -128,16 +135,18 @@ async def test_subscribe_cognify_progress_url_conversion_http(client):
     mock_websocket.__aenter__ = AsyncMock(return_value=mock_websocket)
     mock_websocket.__aexit__ = AsyncMock(return_value=None)
     mock_websocket.recv = AsyncMock(side_effect=[json.dumps({"status": "completed"})])
-    
+
     mock_websockets_module.connect = AsyncMock(return_value=mock_websocket)
     mock_websockets_module.exceptions = MagicMock()
     mock_websockets_module.exceptions.ConnectionClosed = Exception
 
     with patch.dict(sys.modules, {"websockets": mock_websockets_module}):
         import importlib
+
         import cognee_sdk.client
+
         importlib.reload(cognee_sdk.client)
-        
+
         async for _ in client.subscribe_cognify_progress(pipeline_run_id):
             break
 
@@ -160,16 +169,18 @@ async def test_subscribe_cognify_progress_url_conversion_https():
     mock_websocket.__aenter__ = AsyncMock(return_value=mock_websocket)
     mock_websocket.__aexit__ = AsyncMock(return_value=None)
     mock_websocket.recv = AsyncMock(side_effect=[json.dumps({"status": "completed"})])
-    
+
     mock_websockets_module.connect = AsyncMock(return_value=mock_websocket)
     mock_websockets_module.exceptions = MagicMock()
     mock_websockets_module.exceptions.ConnectionClosed = Exception
 
     with patch.dict(sys.modules, {"websockets": mock_websockets_module}):
         import importlib
+
         import cognee_sdk.client
+
         importlib.reload(cognee_sdk.client)
-        
+
         async for _ in https_client.subscribe_cognify_progress(pipeline_run_id):
             break
 
@@ -191,16 +202,18 @@ async def test_subscribe_cognify_progress_authentication_header(client):
     mock_websocket.__aenter__ = AsyncMock(return_value=mock_websocket)
     mock_websocket.__aexit__ = AsyncMock(return_value=None)
     mock_websocket.recv = AsyncMock(side_effect=[json.dumps({"status": "completed"})])
-    
+
     mock_websockets_module.connect = AsyncMock(return_value=mock_websocket)
     mock_websockets_module.exceptions = MagicMock()
     mock_websockets_module.exceptions.ConnectionClosed = Exception
 
     with patch.dict(sys.modules, {"websockets": mock_websockets_module}):
         import importlib
+
         import cognee_sdk.client
+
         importlib.reload(cognee_sdk.client)
-        
+
         async for _ in client.subscribe_cognify_progress(pipeline_run_id):
             break
 
@@ -222,16 +235,18 @@ async def test_subscribe_cognify_progress_server_error(client):
     mock_websocket.__aenter__ = AsyncMock(return_value=mock_websocket)
     mock_websocket.__aexit__ = AsyncMock(return_value=None)
     mock_websocket.recv = AsyncMock(side_effect=Exception("WebSocket server error"))
-    
+
     mock_websockets_module.connect = AsyncMock(return_value=mock_websocket)
     mock_websockets_module.exceptions = MagicMock()
     mock_websockets_module.exceptions.ConnectionClosed = Exception
 
     with patch.dict(sys.modules, {"websockets": mock_websockets_module}):
         import importlib
+
         import cognee_sdk.client
+
         importlib.reload(cognee_sdk.client)
-        
+
         with pytest.raises(ServerError) as exc_info:
             async for _ in client.subscribe_cognify_progress(pipeline_run_id):
                 pass

@@ -4,20 +4,20 @@ Unit tests for core infrastructure methods.
 Tests _get_headers(), _handle_error_response(), and _request() methods.
 """
 
-import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx
+import pytest
 
 from cognee_sdk import CogneeClient
 from cognee_sdk.exceptions import (
     AuthenticationError,
-    NotFoundError,
-    ValidationError,
-    ServerError,
     CogneeAPIError,
-    TimeoutError,
     CogneeSDKError,
+    NotFoundError,
+    ServerError,
+    TimeoutError,
+    ValidationError,
 )
 
 
@@ -359,8 +359,8 @@ class TestRequest:
 
                 # Check exponential backoff: delay * (2 ** attempt)
                 assert len(sleep_times) == 2
-                assert sleep_times[0] == pytest.approx(0.1 * (2 ** 0), rel=0.1)
-                assert sleep_times[1] == pytest.approx(0.1 * (2 ** 1), rel=0.1)
+                assert sleep_times[0] == pytest.approx(0.1 * (2**0), rel=0.1)
+                assert sleep_times[1] == pytest.approx(0.1 * (2**1), rel=0.1)
 
     @pytest.mark.asyncio
     async def test_request_error_response_handling(self, client):
@@ -396,7 +396,9 @@ class TestRequest:
         mock_response = MagicMock()
         mock_response.status_code = 200
 
-        with patch.object(client_with_slash.client, "request", new_callable=AsyncMock) as mock_request:
+        with patch.object(
+            client_with_slash.client, "request", new_callable=AsyncMock
+        ) as mock_request:
             mock_request.return_value = mock_response
             await client_with_slash._request("GET", "/api/v1/datasets")
 
@@ -404,4 +406,3 @@ class TestRequest:
             # Should handle trailing slash correctly
             url = call_args[0][1]
             assert url == "http://localhost:8000/api/v1/datasets"
-

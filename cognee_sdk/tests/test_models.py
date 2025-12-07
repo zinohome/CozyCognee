@@ -4,31 +4,32 @@ Unit tests for data models.
 Tests all Pydantic models and enumerations.
 """
 
-import pytest
-from uuid import uuid4
 from datetime import datetime
+from uuid import uuid4
+
+import pytest
 from pydantic import ValidationError as PydanticValidationError
 
 from cognee_sdk.models import (
-    SearchType,
-    PipelineRunStatus,
-    User,
-    Dataset,
-    DataItem,
     AddResult,
-    DeleteResult,
     CognifyResult,
-    MemifyResult,
-    UpdateResult,
-    SearchResult,
     CombinedSearchResult,
-    SearchHistoryItem,
-    GraphNode,
-    GraphEdge,
+    DataItem,
+    Dataset,
+    DeleteResult,
     GraphData,
+    GraphEdge,
+    GraphNode,
+    HealthStatus,
+    MemifyResult,
+    PipelineRunStatus,
+    SearchHistoryItem,
+    SearchResult,
+    SearchType,
     SyncResult,
     SyncStatus,
-    HealthStatus,
+    UpdateResult,
+    User,
 )
 
 
@@ -260,9 +261,7 @@ class TestUpdateResult:
         """Test creating UpdateResult."""
         data_id = uuid4()
 
-        result = UpdateResult(
-            status="success", message="Data updated", data_id=data_id
-        )
+        result = UpdateResult(status="success", message="Data updated", data_id=data_id)
 
         assert result.status == "success"
         assert result.message == "Data updated"
@@ -294,9 +293,7 @@ class TestSearchResult:
 
     def test_search_result_with_extra_fields(self):
         """Test SearchResult allows extra fields."""
-        result = SearchResult(
-            id="1", text="Result", extra_field="extra_value"
-        )
+        result = SearchResult(id="1", text="Result", extra_field="extra_value")
 
         assert hasattr(result, "extra_field")
         assert result.extra_field == "extra_value"
@@ -362,9 +359,7 @@ class TestGraphNode:
         """Test creating GraphNode."""
         node_id = uuid4()
 
-        node = GraphNode(
-            id=node_id, label="Person", properties={"name": "John", "age": 30}
-        )
+        node = GraphNode(id=node_id, label="Person", properties={"name": "John", "age": 30})
 
         assert node.id == node_id
         assert node.label == "Person"
@@ -387,9 +382,7 @@ class TestGraphEdge:
         source_id = uuid4()
         target_id = uuid4()
 
-        edge = GraphEdge(
-            source=source_id, target=target_id, label="KNOWS"
-        )
+        edge = GraphEdge(source=source_id, target=target_id, label="KNOWS")
 
         assert edge.source == source_id
         assert edge.target == target_id
@@ -481,9 +474,7 @@ class TestSyncStatus:
 
     def test_sync_status_no_running_sync(self):
         """Test creating SyncStatus with no running syncs."""
-        status = SyncStatus(
-            has_running_sync=False, running_sync_count=0, latest_running_sync=None
-        )
+        status = SyncStatus(has_running_sync=False, running_sync_count=0, latest_running_sync=None)
 
         assert status.has_running_sync is False
         assert status.running_sync_count == 0
@@ -548,4 +539,3 @@ class TestModelValidation:
         user_json = user.model_dump_json()
         assert str(user_id) in user_json
         assert "user@example.com" in user_json
-

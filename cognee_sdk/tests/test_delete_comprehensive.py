@@ -4,9 +4,10 @@ Comprehensive unit tests for delete functionality.
 Tests soft/hard delete modes and error cases.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient
 from cognee_sdk.exceptions import NotFoundError
@@ -36,9 +37,7 @@ class TestDeleteModes:
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
-            result = await client.delete(
-                data_id=data_id, dataset_id=dataset_id, mode="soft"
-            )
+            result = await client.delete(data_id=data_id, dataset_id=dataset_id, mode="soft")
 
             assert isinstance(result, DeleteResult)
             assert result.status == "success"
@@ -61,9 +60,7 @@ class TestDeleteModes:
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
-            result = await client.delete(
-                data_id=data_id, dataset_id=dataset_id, mode="hard"
-            )
+            result = await client.delete(data_id=data_id, dataset_id=dataset_id, mode="hard")
 
             assert isinstance(result, DeleteResult)
             assert result.status == "success"
@@ -179,9 +176,7 @@ class TestDeleteParameters:
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
-            await client.delete(
-                data_id=data_id, dataset_id=dataset_id, mode="hard"
-            )
+            await client.delete(data_id=data_id, dataset_id=dataset_id, mode="hard")
 
             call_args = mock_request.call_args
             params = call_args[1]["params"]
@@ -191,4 +186,3 @@ class TestDeleteParameters:
             # Verify DELETE method was used
             assert call_args[0][0] == "DELETE"
             assert call_args[0][1] == "/api/v1/delete"
-

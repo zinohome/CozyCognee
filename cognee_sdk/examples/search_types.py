@@ -5,6 +5,7 @@ This example demonstrates different search types available in Cognee.
 """
 
 import asyncio
+
 from cognee_sdk import CogneeClient, SearchType
 
 
@@ -114,4 +115,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

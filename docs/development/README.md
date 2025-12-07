@@ -19,6 +19,7 @@
 - [CORS 跨域问题排查](./CORS_LOCAL_DEV.md) - 本地开发时的 CORS 问题解决方案
 - [SDK 开发可行性分析](./SDK_FEASIBILITY_ANALYSIS.md) - Cognee SDK 开发的可行性分析和性能评估
 - [SDK 开发设计文档与工作量评估](./SDK_DESIGN_AND_WORKLOAD.md) - 详细的 SDK 架构设计、实现方案和工作量评估
+- [SDK 测试指南](./SDK_TESTING.md) - Cognee SDK 的测试方法和编写指南
 
 ## 开发环境设置
 

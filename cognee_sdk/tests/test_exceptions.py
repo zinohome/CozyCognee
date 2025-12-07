@@ -4,16 +4,15 @@ Unit tests for exception classes.
 Tests all exception types and their properties.
 """
 
-import pytest
 
 from cognee_sdk.exceptions import (
-    CogneeSDKError,
-    CogneeAPIError,
     AuthenticationError,
+    CogneeAPIError,
+    CogneeSDKError,
     NotFoundError,
-    ValidationError,
     ServerError,
     TimeoutError,
+    ValidationError,
 )
 
 
@@ -209,4 +208,3 @@ class TestExceptionHierarchy:
         assert isinstance(validation_error, Exception)
         assert isinstance(server_error, Exception)
         assert isinstance(timeout_error, Exception)
-

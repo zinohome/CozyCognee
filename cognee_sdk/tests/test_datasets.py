@@ -2,9 +2,10 @@
 Unit tests for dataset management API.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient
 from cognee_sdk.exceptions import ValidationError
@@ -341,4 +342,3 @@ async def test_get_dataset_graph_complex(client):
         assert graph.nodes[0].id == node1_id
         assert graph.edges[0].source == node1_id
         assert graph.edges[0].target == node2_id
-

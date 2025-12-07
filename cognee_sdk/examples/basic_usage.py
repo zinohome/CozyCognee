@@ -8,6 +8,7 @@ This example demonstrates the core functionality of the Cognee SDK:
 """
 
 import asyncio
+
 from cognee_sdk import CogneeClient, SearchType
 
 
@@ -83,4 +84,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

@@ -6,6 +6,7 @@ This example demonstrates how to upload different types of files to Cognee.
 
 import asyncio
 from pathlib import Path
+
 from cognee_sdk import CogneeClient
 
 
@@ -36,7 +37,7 @@ async def main():
         # Create a temporary file for demonstration
         temp_file = Path("temp_example.txt")
         temp_file.write_text("This is a temporary file for demonstration.")
-        
+
         try:
             result3 = await client.add(
                 data=temp_file,
@@ -80,4 +81,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

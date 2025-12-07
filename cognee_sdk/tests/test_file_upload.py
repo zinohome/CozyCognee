@@ -7,12 +7,13 @@ Tests add(), update(), and add_batch() methods with various input types.
 import io
 import tempfile
 from pathlib import Path
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import pytest
+
 from cognee_sdk import CogneeClient
-from cognee_sdk.exceptions import ValidationError, CogneeSDKError
+from cognee_sdk.exceptions import CogneeSDKError, ValidationError
 from cognee_sdk.models import AddResult, UpdateResult
 
 
@@ -106,7 +107,7 @@ class TestAddMethod:
             temp_path = Path(f.name)
 
         try:
-            with patch("builtins.open", side_effect=IOError("Permission denied")):
+            with patch("builtins.open", side_effect=OSError("Permission denied")):
                 with pytest.raises(CogneeSDKError) as exc_info:
                     await client.add(data=temp_path, dataset_name="test-dataset")
 
@@ -327,9 +328,7 @@ class TestUpdateMethod:
 
             with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
                 mock_request.return_value = mock_response
-                result = await client.update(
-                    data_id=data_id, dataset_id=dataset_id, data=temp_path
-                )
+                result = await client.update(data_id=data_id, dataset_id=dataset_id, data=temp_path)
 
                 assert isinstance(result, UpdateResult)
         finally:
@@ -351,9 +350,7 @@ class TestUpdateMethod:
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
-            result = await client.update(
-                data_id=data_id, dataset_id=dataset_id, data=file_obj
-            )
+            result = await client.update(data_id=data_id, dataset_id=dataset_id, data=file_obj)
 
             assert isinstance(result, UpdateResult)
 
@@ -368,11 +365,9 @@ class TestUpdateMethod:
             temp_path = Path(f.name)
 
         try:
-            with patch("builtins.open", side_effect=IOError("Permission denied")):
+            with patch("builtins.open", side_effect=OSError("Permission denied")):
                 with pytest.raises(CogneeSDKError) as exc_info:
-                    await client.update(
-                        data_id=data_id, dataset_id=dataset_id, data=temp_path
-                    )
+                    await client.update(data_id=data_id, dataset_id=dataset_id, data=temp_path)
 
                 assert "Failed to read file" in str(exc_info.value)
         finally:
@@ -451,9 +446,7 @@ class TestAddBatchMethod:
             mock_add.return_value = AddResult(
                 status="success", message="Data added", data_id=uuid4()
             )
-            results = await client.add_batch(
-                data_list=data_list, dataset_id=dataset_id
-            )
+            results = await client.add_batch(data_list=data_list, dataset_id=dataset_id)
 
             assert len(results) == 2
             # Verify dataset_id was passed to add
@@ -510,4 +503,3 @@ class TestAddBatchMethod:
             # Total time should be close to single call time, not 3x
             duration = end_time - start_time
             assert duration < 0.5  # Should be much less than 3 * 0.1 = 0.3s
-

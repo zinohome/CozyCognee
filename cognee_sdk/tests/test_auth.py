@@ -2,11 +2,12 @@
 Unit tests for authentication API.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from cognee_sdk import CogneeClient
-from cognee_sdk.exceptions import AuthenticationError, ValidationError
+from cognee_sdk.exceptions import ValidationError
 from cognee_sdk.models import User
 
 
@@ -92,4 +93,3 @@ async def test_get_current_user(client):
         assert isinstance(user, User)
         assert user.email == "user@example.com"
         mock_request.assert_called_once()
-

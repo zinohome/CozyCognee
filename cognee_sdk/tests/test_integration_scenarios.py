@@ -4,19 +4,18 @@ Integration test scenarios.
 Tests complete workflows and error recovery scenarios.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient, SearchType
 from cognee_sdk.exceptions import AuthenticationError, ServerError
 from cognee_sdk.models import (
-    Dataset,
     AddResult,
-    CognifyResult,
-    SearchResult,
-    GraphData,
+    Dataset,
     DeleteResult,
+    GraphData,
 )
 
 
@@ -139,9 +138,7 @@ class TestCompleteWorkflow:
             assert len(graph.nodes) > 0
 
             # Step 6: Delete data
-            delete_result = await client.delete(
-                data_id=data_id, dataset_id=dataset_id
-            )
+            delete_result = await client.delete(data_id=data_id, dataset_id=dataset_id)
             assert isinstance(delete_result, DeleteResult)
             assert delete_result.status == "success"
 
@@ -219,7 +216,6 @@ class TestErrorRecovery:
     @pytest.mark.asyncio
     async def test_server_error_retry(self, client):
         """Test retry mechanism on server errors."""
-        import httpx
 
         # Server errors (5xx) should not retry by default in _request
         # But we can test the error handling
@@ -271,6 +267,7 @@ class TestComplexScenarios:
         }
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
+
             def side_effect(method, endpoint, **kwargs):
                 if endpoint == "/api/v1/datasets" and method == "GET":
                     return list_response
@@ -285,9 +282,7 @@ class TestComplexScenarios:
             assert len(datasets) == 2
 
             # Cognify multiple datasets
-            result = await client.cognify(
-                datasets=["dataset1", "dataset2"]
-            )
+            result = await client.cognify(datasets=["dataset1", "dataset2"])
             assert isinstance(result, dict)
 
     @pytest.mark.asyncio
@@ -295,9 +290,7 @@ class TestComplexScenarios:
         """Test search with multiple filters applied."""
         dataset_id = uuid4()
         search_response = MagicMock()
-        search_response.json.return_value = [
-            {"id": "1", "text": "Result", "score": 0.9}
-        ]
+        search_response.json.return_value = [{"id": "1", "text": "Result", "score": 0.9}]
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = search_response
@@ -324,4 +317,3 @@ class TestComplexScenarios:
             assert "system_prompt" in payload
             assert "node_name" in payload
             assert payload["top_k"] == 20
-

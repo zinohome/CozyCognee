@@ -2,9 +2,10 @@
 Unit tests for advanced features.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient
 from cognee_sdk.models import AddResult
@@ -42,4 +43,3 @@ async def test_add_batch(client):
         assert len(results) == 3
         assert all(isinstance(r, AddResult) for r in results)
         assert mock_add.call_count == 3
-

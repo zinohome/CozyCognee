@@ -2,9 +2,10 @@
 Unit tests for sync API.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient
 from cognee_sdk.models import SyncResult, SyncStatus
@@ -106,4 +107,3 @@ async def test_get_sync_status_no_running(client):
         assert status.has_running_sync is False
         assert status.running_sync_count == 0
         assert status.latest_running_sync is None
-

@@ -5,12 +5,13 @@ Tests concurrent operations and batch processing.
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import pytest
+
 from cognee_sdk import CogneeClient
-from cognee_sdk.models import AddResult, SearchResult
+from cognee_sdk.models import AddResult
 
 
 @pytest.fixture
@@ -36,10 +37,7 @@ class TestConcurrentOperations:
             mock_request.return_value = mock_response
 
             # Create multiple concurrent add tasks
-            tasks = [
-                client.add(data=f"Data {i}", dataset_name="test-dataset")
-                for i in range(5)
-            ]
+            tasks = [client.add(data=f"Data {i}", dataset_name="test-dataset") for i in range(5)]
             results = await asyncio.gather(*tasks)
 
             assert len(results) == 5
@@ -50,17 +48,13 @@ class TestConcurrentOperations:
     async def test_concurrent_search_operations(self, client):
         """Test multiple concurrent search operations."""
         mock_response = MagicMock()
-        mock_response.json.return_value = [
-            {"id": "1", "text": "Result", "score": 0.9}
-        ]
+        mock_response.json.return_value = [{"id": "1", "text": "Result", "score": 0.9}]
 
         with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
             mock_request.return_value = mock_response
 
             # Create multiple concurrent search tasks
-            tasks = [
-                client.search(query=f"Query {i}") for i in range(5)
-            ]
+            tasks = [client.search(query=f"Query {i}") for i in range(5)]
             results = await asyncio.gather(*tasks)
 
             assert len(results) == 5
@@ -78,9 +72,7 @@ class TestConcurrentOperations:
         }
 
         search_response = MagicMock()
-        search_response.json.return_value = [
-            {"id": "1", "text": "Result", "score": 0.9}
-        ]
+        search_response.json.return_value = [{"id": "1", "text": "Result", "score": 0.9}]
 
         list_response = MagicMock()
         list_response.json.return_value = []
@@ -131,15 +123,11 @@ class TestBatchOperations:
             async with call_lock:
                 call_times.append(asyncio.get_event_loop().time())
             await asyncio.sleep(0.01)  # Simulate network delay
-            return AddResult(
-                status="success", message="Data added", data_id=uuid4()
-            )
+            return AddResult(status="success", message="Data added", data_id=uuid4())
 
         with patch.object(client, "add", side_effect=mock_add_with_timing):
             start_time = asyncio.get_event_loop().time()
-            results = await client.add_batch(
-                data_list=data_list, dataset_name="test-dataset"
-            )
+            results = await client.add_batch(data_list=data_list, dataset_name="test-dataset")
             end_time = asyncio.get_event_loop().time()
 
             assert len(results) == 10
@@ -157,9 +145,7 @@ class TestBatchOperations:
             mock_add.return_value = AddResult(
                 status="success", message="Data added", data_id=uuid4()
             )
-            results = await client.add_batch(
-                data_list=data_list, dataset_name="test-dataset"
-            )
+            results = await client.add_batch(data_list=data_list, dataset_name="test-dataset")
 
             assert len(results) == 100
             assert mock_add.call_count == 100
@@ -178,17 +164,13 @@ class TestBatchOperations:
             call_count += 1
             if call_count <= 2:
                 # First two succeed
-                return AddResult(
-                    status="success", message="Data added", data_id=uuid4()
-                )
+                return AddResult(status="success", message="Data added", data_id=uuid4())
             elif call_count == 3:
                 # Third fails
                 raise ServerError("Server error", 500)
             else:
                 # Rest succeed
-                return AddResult(
-                    status="success", message="Data added", data_id=uuid4()
-                )
+                return AddResult(status="success", message="Data added", data_id=uuid4())
 
         with patch.object(client, "add", side_effect=mock_add_with_failures):
             # Should raise the first exception encountered
@@ -218,7 +200,5 @@ class TestConnectionPooling:
             assert mock_request.call_count == 3
             # Verify all requests were made (connection pooling is handled by httpx internally)
             assert all(
-                len(call[0]) >= 2 and call[0][0] == "GET" 
-                for call in mock_request.call_args_list
+                len(call[0]) >= 2 and call[0][0] == "GET" for call in mock_request.call_args_list
             )
-

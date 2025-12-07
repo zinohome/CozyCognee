@@ -2,9 +2,10 @@
 Unit tests for memify and search history API.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient
 from cognee_sdk.exceptions import ValidationError
@@ -74,4 +75,3 @@ async def test_get_search_history(client):
         assert all(isinstance(item, SearchHistoryItem) for item in history)
         assert history[0].text == "test query 1"
         mock_request.assert_called_once()
-

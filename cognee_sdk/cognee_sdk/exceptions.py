@@ -4,7 +4,6 @@ Exception classes for Cognee SDK.
 All exceptions inherit from CogneeSDKError and provide detailed error information.
 """
 
-from typing import Optional
 
 
 class CogneeSDKError(Exception):
@@ -20,7 +19,7 @@ class CogneeAPIError(CogneeSDKError):
         self,
         message: str,
         status_code: int,
-        response: Optional[dict] = None,
+        response: dict | None = None,
     ) -> None:
         """
         Initialize API error.
@@ -73,4 +72,3 @@ class TimeoutError(CogneeSDKError):
         """
         self.attempts = attempts
         super().__init__(message)
-

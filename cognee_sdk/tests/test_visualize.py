@@ -2,9 +2,10 @@
 Unit tests for visualization API.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from cognee_sdk import CogneeClient
 
@@ -30,4 +31,3 @@ async def test_visualize(client):
         assert isinstance(html, str)
         assert "Graph Visualization" in html
         mock_request.assert_called_once()
-
