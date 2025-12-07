@@ -1,6 +1,6 @@
 [project]
 name = "cognee-sdk"
-version = "0.1.0"
+version = "0.1.1"
 description = "Lightweight Python SDK for Cognee - AI Memory Platform"
 readme = "README.md"
 requires-python = ">=3.10"
