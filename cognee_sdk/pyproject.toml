@@ -28,6 +28,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+http2 = [
+    "httpx[http2]>=0.25.0",
+]
 websocket = [
     "websockets>=12.0",
 ]

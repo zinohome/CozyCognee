@@ -5,9 +5,12 @@ Main client class for interacting with Cognee API server.
 """
 
 import asyncio
+import gzip
+import hashlib
 import json
 import logging
 import mimetypes
+import time
 import warnings
 from collections.abc import AsyncIterator
 from io import BufferedReader
@@ -85,8 +88,12 @@ class CogneeClient:
         enable_logging: bool = False,
         request_interceptor: Callable[[str, str, dict[str, Any]], None] | None = None,
         response_interceptor: Callable[[httpx.Response], None] | None = None,
-        max_keepalive_connections: int = 10,
-        max_connections: int = 20,
+        max_keepalive_connections: int = 50,
+        max_connections: int = 100,
+        enable_compression: bool = True,
+        enable_http2: bool = True,
+        enable_cache: bool = True,
+        cache_ttl: int = 300,
     ) -> None:
         """
         Initialize Cognee client.
@@ -102,8 +109,12 @@ class CogneeClient:
                                Receives (method, url, headers) as arguments
             response_interceptor: Optional callback function called after each response.
                                 Receives httpx.Response as argument
-            max_keepalive_connections: Maximum number of keepalive connections (default: 10)
-            max_connections: Maximum number of total connections (default: 20)
+            max_keepalive_connections: Maximum number of keepalive connections (default: 50)
+            max_connections: Maximum number of total connections (default: 100)
+            enable_compression: Enable request/response compression (default: True)
+            enable_http2: Enable HTTP/2 support (default: True)
+            enable_cache: Enable local caching for read operations (default: True)
+            cache_ttl: Cache time-to-live in seconds (default: 300)
         """
         self.api_url = api_url.rstrip("/")
         self.api_token = api_token
@@ -113,6 +124,18 @@ class CogneeClient:
         self.enable_logging = enable_logging
         self.request_interceptor = request_interceptor
         self.response_interceptor = response_interceptor
+        self.enable_compression = enable_compression
+        self.enable_cache = enable_cache
+        self.cache_ttl = cache_ttl
+        self.max_keepalive_connections = max_keepalive_connections
+        self.max_connections = max_connections
+        self.enable_http2 = enable_http2
+
+        # Initialize cache
+        if enable_cache:
+            self._cache: dict[str, tuple[Any, float]] = {}
+        else:
+            self._cache = {}
 
         # Setup logger if logging is enabled
         if enable_logging:
@@ -128,7 +151,20 @@ class CogneeClient:
         else:
             self.logger = None
 
-        # Create HTTP client with configurable connection pool
+        # Check if HTTP/2 is available
+        http2_enabled = enable_http2
+        if enable_http2:
+            try:
+                import h2  # noqa: F401
+            except ImportError:
+                http2_enabled = False
+                if self.logger:
+                    self.logger.warning(
+                        "HTTP/2 requested but 'h2' package not installed. "
+                        "Install with: pip install httpx[http2]. Falling back to HTTP/1.1."
+                    )
+
+        # Create HTTP client with optimized connection pool and HTTP/2
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout, connect=10.0),
             limits=httpx.Limits(
@@ -136,11 +172,12 @@ class CogneeClient:
                 max_connections=max_connections,
             ),
             follow_redirects=True,
+            http2=http2_enabled,
         )
 
     def _get_headers(self, content_type: str = "application/json") -> dict[str, str]:
         """
-        Get request headers with authentication.
+        Get request headers with authentication and compression support.
 
         Args:
             content_type: Content-Type header value
@@ -151,7 +188,128 @@ class CogneeClient:
         headers: dict[str, str] = {"Content-Type": content_type}
         if self.api_token:
             headers["Authorization"] = f"Bearer {self.api_token}"
+        
+        # Add compression headers if enabled
+        if self.enable_compression:
+            headers["Accept-Encoding"] = "gzip, deflate, br"
+        
         return headers
+    
+    def _get_cache_key(self, method: str, endpoint: str, **kwargs: Any) -> str:
+        """
+        Generate cache key for a request.
+        
+        Args:
+            method: HTTP method
+            endpoint: API endpoint
+            **kwargs: Request parameters
+            
+        Returns:
+            Cache key string (empty string if not cacheable)
+        """
+        # Cache GET requests and POST requests with json payload (like search)
+        # For POST with json, we include the json in the cache key
+        if method.upper() not in ("GET", "POST"):
+            return ""
+        
+        # Create a hash of the request parameters
+        cache_data = {
+            "method": method,
+            "endpoint": endpoint,
+            "params": kwargs.get("params", {}),
+            "headers": {k: v for k, v in kwargs.get("headers", {}).items() 
+                       if k.lower() not in ["authorization", "user-agent"]},
+        }
+        # Also include json payload for POST requests that should be cached (like search)
+        if "json" in kwargs:
+            cache_data["json"] = kwargs["json"]
+        
+        cache_str = json.dumps(cache_data, sort_keys=True)
+        return hashlib.md5(cache_str.encode()).hexdigest()
+    
+    def _get_from_cache(self, cache_key: str) -> Any | None:
+        """
+        Get value from cache if valid.
+        
+        Args:
+            cache_key: Cache key
+            
+        Returns:
+            Cached value or None if not found/expired
+        """
+        if not self.enable_cache or not cache_key:
+            return None
+        
+        if cache_key in self._cache:
+            value, timestamp = self._cache[cache_key]
+            if time.time() - timestamp < self.cache_ttl:
+                return value
+            else:
+                # Expired, remove from cache
+                del self._cache[cache_key]
+        
+        return None
+    
+    def _set_cache(self, cache_key: str, value: Any) -> None:
+        """
+        Set value in cache.
+        
+        Args:
+            cache_key: Cache key
+            value: Value to cache
+        """
+        if self.enable_cache and cache_key:
+            self._cache[cache_key] = (value, time.time())
+    
+    def _compress_data(self, data: bytes) -> tuple[bytes, bool]:
+        """
+        Compress data if it's large enough to benefit from compression.
+        
+        Args:
+            data: Data to compress
+            
+        Returns:
+            Tuple of (compressed_data, was_compressed)
+        """
+        if not self.enable_compression or len(data) < 1024:  # Don't compress small data
+            return data, False
+        
+        try:
+            compressed = gzip.compress(data, compresslevel=6)  # Balance between speed and size
+            # Only use compressed version if it's actually smaller
+            if len(compressed) < len(data) * 0.9:  # At least 10% reduction
+                return compressed, True
+        except Exception:
+            # If compression fails, return original
+            if self.logger:
+                self.logger.warning("Failed to compress data, using uncompressed")
+        
+        return data, False
+    
+    def _decompress_response(self, response: httpx.Response) -> httpx.Response:
+        """
+        Decompress response if needed.
+        
+        Args:
+            response: HTTP response
+            
+        Returns:
+            Response (possibly modified)
+        """
+        if not self.enable_compression:
+            return response
+        
+        content_encoding = response.headers.get("Content-Encoding", "").lower()
+        if content_encoding == "gzip" and response.content:
+            try:
+                decompressed = gzip.decompress(response.content)
+                # Create a new response with decompressed content
+                response._content = decompressed
+            except Exception:
+                if self.logger:
+                    self.logger.warning("Failed to decompress response")
+        
+        return response
 
     def _parse_json_response(self, response: httpx.Response) -> dict[str, Any] | list[dict[str, Any]]:
         """
@@ -252,6 +410,10 @@ class CogneeClient:
         url = f"{self.api_url}{endpoint}"
         headers = kwargs.pop("headers", {})
         
+        # Cache is handled in individual methods (list_datasets, search, etc.)
+        # to properly handle response parsing
+        cache_key = ""  # Initialize cache_key for potential use in response caching
+        
         # For multipart/form-data requests, don't set Content-Type header
         # Let httpx set it automatically with boundary
         if "files" in kwargs:
@@ -259,8 +421,20 @@ class CogneeClient:
             base_headers = {}
             if self.api_token:
                 base_headers["Authorization"] = f"Bearer {self.api_token}"
+            # Don't compress multipart data
         else:
             base_headers = self._get_headers()
+            
+            # Compress JSON data if enabled
+            if self.enable_compression and "json" in kwargs:
+                json_data = kwargs["json"]
+                json_bytes = json.dumps(json_data).encode("utf-8")
+                compressed_data, was_compressed = self._compress_data(json_bytes)
+                if was_compressed:
+                    kwargs["content"] = compressed_data
+                    kwargs.pop("json")
+                    base_headers["Content-Encoding"] = "gzip"
+                    base_headers["Content-Type"] = "application/json"
 
         # Merge headers, custom headers take precedence
         merged_headers = {**base_headers, **headers}
@@ -337,6 +511,24 @@ class CogneeClient:
                     
                     # Should not reach here, but handle just in case
                     await self._handle_error_response(response)
+
+                # Decompress response if needed
+                response = self._decompress_response(response)
+                
+                # Cache successful GET responses
+                if cache_key and response.status_code == 200:
+                    try:
+                        # Try to get JSON response for caching
+                        content_type = response.headers.get("Content-Type", "").lower()
+                        if "application/json" in content_type:
+                            # Clone response content before caching (response.json() consumes the stream)
+                            response_content = response.content
+                            if response_content:
+                                cached_data = json.loads(response_content)
+                                self._set_cache(cache_key, cached_data)
+                    except Exception:
+                        # If we can't parse JSON, don't cache
+                        pass
 
                 return response
 
@@ -450,8 +642,8 @@ class CogneeClient:
         """
         # Maximum recommended file size (50MB) - files larger than this will use streaming
         MAX_RECOMMENDED_FILE_SIZE = 50 * 1024 * 1024
-        # Threshold for streaming upload (10MB) - files larger than this will stream
-        STREAMING_THRESHOLD = 10 * 1024 * 1024
+        # Threshold for streaming upload (1MB) - files larger than this will stream (optimized from 10MB)
+        STREAMING_THRESHOLD = 1 * 1024 * 1024
 
         if isinstance(data, str):
             # Check if it's a file path
@@ -880,8 +1072,21 @@ class CogneeClient:
         if node_name:
             payload["node_name"] = node_name
 
-        response = await self._request("POST", "/api/v1/search", json=payload)
-        result_data = response.json()
+        # Check cache for search queries
+        cache_key = self._get_cache_key("POST", "/api/v1/search", json=payload) if self.enable_cache else ""
+        if cache_key:
+            cached_data = self._get_from_cache(cache_key)
+            if cached_data is not None:
+                result_data = cached_data
+            else:
+                response = await self._request("POST", "/api/v1/search", json=payload)
+                result_data = self._parse_json_response(response)
+                # Cache the result
+                if cache_key:
+                    self._set_cache(cache_key, result_data)
+        else:
+            response = await self._request("POST", "/api/v1/search", json=payload)
+            result_data = self._parse_json_response(response)
 
         # Handle raw return type
         if return_type == "raw":
@@ -923,8 +1128,21 @@ class CogneeClient:
             AuthenticationError: If authentication fails
             ServerError: If request fails
         """
-        response = await self._request("GET", "/api/v1/datasets")
-        result_data = response.json()
+        # Check cache
+        cache_key = self._get_cache_key("GET", "/api/v1/datasets") if self.enable_cache else ""
+        if cache_key:
+            cached_data = self._get_from_cache(cache_key)
+            if cached_data is not None:
+                result_data = cached_data
+            else:
+                response = await self._request("GET", "/api/v1/datasets")
+                result_data = self._parse_json_response(response)
+                # Cache the result
+                if cache_key:
+                    self._set_cache(cache_key, result_data)
+        else:
+            response = await self._request("GET", "/api/v1/datasets")
+            result_data = self._parse_json_response(response)
         return [Dataset(**item) for item in result_data]
 
     async def create_dataset(self, name: str) -> Dataset:
@@ -1388,9 +1606,10 @@ class CogneeClient:
         dataset_name: str | None = None,
         dataset_id: UUID | None = None,
         node_set: list[str] | None = None,
-        max_concurrent: int = 10,
+        max_concurrent: int | None = None,
         continue_on_error: bool = False,
         return_errors: bool = False,
+        adaptive_concurrency: bool = True,
     ) -> list[AddResult] | tuple[list[AddResult], list[Exception]]:
         """
         Add multiple data items in batch with concurrent control and error handling.
@@ -1400,9 +1619,11 @@ class CogneeClient:
             dataset_name: Name of the dataset
             dataset_id: UUID of the dataset
             node_set: Optional list of node identifiers
-            max_concurrent: Maximum number of concurrent operations (default: 10)
+            max_concurrent: Maximum number of concurrent operations. If None and adaptive_concurrency=True,
+                          will be automatically determined based on data size (default: None)
             continue_on_error: If True, continue processing even if some items fail (default: False)
             return_errors: If True, return tuple of (results, errors) instead of just results (default: False)
+            adaptive_concurrency: If True, automatically adjust concurrency based on data size (default: True)
 
         Returns:
             If return_errors=False: List of AddResult objects
@@ -1434,6 +1655,31 @@ class CogneeClient:
             if return_errors:
                 return [], []
             return []
+
+        # Adaptive concurrency: adjust based on data size
+        if adaptive_concurrency and max_concurrent is None:
+            # Estimate average data size
+            total_size = 0
+            sample_count = min(10, len(data_list))  # Sample first 10 items
+            for item in data_list[:sample_count]:
+                if isinstance(item, (str, bytes)):
+                    total_size += len(item) if isinstance(item, bytes) else len(item.encode())
+                elif isinstance(item, Path) and item.exists():
+                    total_size += item.stat().st_size
+            
+            avg_size = total_size / sample_count if sample_count > 0 else 0
+            
+            # Adjust concurrency based on data size
+            if avg_size > 10 * 1024 * 1024:  # > 10MB
+                max_concurrent = 5  # Large files: lower concurrency
+            elif avg_size > 1 * 1024 * 1024:  # > 1MB
+                max_concurrent = 10  # Medium files: moderate concurrency
+            else:
+                max_concurrent = 20  # Small files: higher concurrency
+        
+        # Default concurrency if not set
+        if max_concurrent is None:
+            max_concurrent = 10
 
         # Use semaphore to control concurrent operations
         semaphore = asyncio.Semaphore(max_concurrent)
