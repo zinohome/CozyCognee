@@ -629,7 +629,7 @@ class CogneeClient:
         opened_files: list[BufferedReader] = []  # Track opened files for cleanup
         
         try:
-            for item in data_list:
+        for item in data_list:
                 field_name, content_or_file, mime_type = self._prepare_file_for_upload(item)
                 # Determine file name for multipart upload
                 if isinstance(item, Path):
@@ -641,7 +641,7 @@ class CogneeClient:
                     file_name = getattr(item, "name", "data.bin")
                 elif isinstance(item, bytes):
                     file_name = "data.bin"
-                else:
+                    else:
                     file_name = "data.txt"
                 
                 # Check if content is a file object (for streaming) or bytes
@@ -956,7 +956,7 @@ class CogneeClient:
         if isinstance(data, Path):
             file_name = data.name
         elif isinstance(data, str) and data.startswith(("/", "file://")):
-            file_path = Path(data.replace("file://", ""))
+                file_path = Path(data.replace("file://", ""))
             file_name = file_path.name if file_path.exists() else "data.txt"
         elif hasattr(data, "name"):
             file_name = getattr(data, "name", "data.bin")
@@ -974,33 +974,33 @@ class CogneeClient:
                 # Track opened file (only for files we opened, not user-provided file objects)
                 if isinstance(content_or_file, BufferedReader):
                     opened_file = content_or_file
-            else:
+        else:
                 # Bytes content - normal upload
                 files = [(field_name, (file_name, content_or_file, mime_type))]
 
-            form_data: dict[str, Any] = {}
-            if node_set:
-                form_data["node_set"] = json.dumps(node_set)
+        form_data: dict[str, Any] = {}
+        if node_set:
+            form_data["node_set"] = json.dumps(node_set)
 
-            params = {
-                "data_id": str(data_id),
-                "dataset_id": str(dataset_id),
-            }
+        params = {
+            "data_id": str(data_id),
+            "dataset_id": str(dataset_id),
+        }
 
-            response = await self._request(
-                "PATCH",
-                "/api/v1/update",
-                files=files,
-                data=form_data,
-                params=params,
-                headers={},
-            )
+        response = await self._request(
+            "PATCH",
+            "/api/v1/update",
+            files=files,
+            data=form_data,
+            params=params,
+            headers={},
+        )
 
-            result_data = response.json()
-            # Handle dictionary of results (one per dataset)
-            if isinstance(result_data, dict):
-                return UpdateResult(**result_data)
-            return UpdateResult(status="success", message="Update completed", data_id=None)
+        result_data = response.json()
+        # Handle dictionary of results (one per dataset)
+        if isinstance(result_data, dict):
+            return UpdateResult(**result_data)
+        return UpdateResult(status="success", message="Update completed", data_id=None)
         finally:
             # Close file if we opened it for streaming
             if opened_file is not None:
@@ -1427,11 +1427,11 @@ class CogneeClient:
             async with semaphore:
                 try:
                     result = await self.add(
-                        data=item,
-                        dataset_name=dataset_name,
-                        dataset_id=dataset_id,
-                        node_set=node_set,
-                    )
+                data=item,
+                dataset_name=dataset_name,
+                dataset_id=dataset_id,
+                node_set=node_set,
+            )
                     return (0, result, None)  # (index_offset, result, error)
                 except Exception as e:
                     return (0, None, e)
