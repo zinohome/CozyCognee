@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import mimetypes
+import warnings
 from collections.abc import AsyncIterator
 from io import BufferedReader
 from pathlib import Path
@@ -151,6 +152,30 @@ class CogneeClient:
         if self.api_token:
             headers["Authorization"] = f"Bearer {self.api_token}"
         return headers
+
+    def _parse_json_response(self, response: httpx.Response) -> dict[str, Any] | list[dict[str, Any]]:
+        """
+        Parse JSON response with error handling.
+
+        Args:
+            response: HTTP response object
+
+        Returns:
+            Parsed JSON data (dict or list)
+
+        Raises:
+            CogneeAPIError: If JSON parsing fails
+        """
+        try:
+            return response.json()
+        except json.JSONDecodeError as e:
+            # Provide more detailed error information
+            error_preview = response.text[:200] if response.text else "(empty response)"
+            raise CogneeAPIError(
+                f"Invalid JSON response: {str(e)}. Response preview: {error_preview}",
+                response.status_code,
+                None,
+            ) from e
 
     async def _handle_error_response(self, response: httpx.Response) -> None:
         """
@@ -352,8 +377,10 @@ class CogneeClient:
             CogneeAPIError: If health check fails
         """
         response = await self._request("GET", "/health")
-        data = response.json()
-        return HealthStatus(**data)
+        data = self._parse_json_response(response)
+        if isinstance(data, dict):
+            return HealthStatus(**data)
+        raise CogneeAPIError("Invalid health check response format", response.status_code, data)
 
     async def close(self) -> None:
         """Close HTTP client and release resources."""
@@ -368,6 +395,31 @@ class CogneeClient:
         await self.close()
 
     # ==================== Helper Methods ====================
+
+    def _get_file_name_for_upload(
+        self,
+        data: str | bytes | Path | BinaryIO,
+    ) -> str:
+        """
+        Determine file name for multipart upload based on data type.
+
+        Args:
+            data: Data item (string, bytes, Path, or BinaryIO)
+
+        Returns:
+            File name string for multipart upload
+        """
+        if isinstance(data, Path):
+            return data.name
+        elif isinstance(data, str) and data.startswith(("/", "file://")):
+            file_path = Path(data.replace("file://", ""))
+            return file_path.name if file_path.exists() else "data.txt"
+        elif hasattr(data, "name"):
+            return getattr(data, "name", "data.bin")
+        elif isinstance(data, bytes):
+            return "data.bin"
+        else:
+            return "data.txt"
 
     def _prepare_file_for_upload(
         self,
@@ -409,7 +461,6 @@ class CogneeClient:
                     # Check file size
                     file_size = file_path.stat().st_size
                     if file_size > MAX_RECOMMENDED_FILE_SIZE:
-                        import warnings
                         warnings.warn(
                             f"File size ({file_size / 1024 / 1024:.1f}MB) exceeds "
                             f"recommended limit ({MAX_RECOMMENDED_FILE_SIZE / 1024 / 1024}MB). "
@@ -465,7 +516,6 @@ class CogneeClient:
             if data.exists() and data.is_file():
                 file_size = data.stat().st_size
                 if file_size > MAX_RECOMMENDED_FILE_SIZE:
-                    import warnings
                     warnings.warn(
                         f"File size ({file_size / 1024 / 1024:.1f}MB) exceeds "
                         f"recommended limit ({MAX_RECOMMENDED_FILE_SIZE / 1024 / 1024}MB). "
@@ -624,25 +674,24 @@ class CogneeClient:
         else:
             data_list = data
 
+        # Prepare form data
+        form_data: dict[str, Any] = {}
+        if dataset_name:
+            form_data["datasetName"] = dataset_name
+        if dataset_id:
+            form_data["datasetId"] = str(dataset_id)
+        if node_set:
+            form_data["node_set"] = json.dumps(node_set)
+
         # Prepare files for multipart/form-data using unified method
         files: list[tuple] = []
         opened_files: list[BufferedReader] = []  # Track opened files for cleanup
         
         try:
-        for item in data_list:
+            for item in data_list:
                 field_name, content_or_file, mime_type = self._prepare_file_for_upload(item)
                 # Determine file name for multipart upload
-                if isinstance(item, Path):
-                    file_name = item.name
-                elif isinstance(item, str) and item.startswith(("/", "file://")):
-                    file_path = Path(item.replace("file://", ""))
-                    file_name = file_path.name if file_path.exists() else "data.txt"
-                elif hasattr(item, "name"):
-                    file_name = getattr(item, "name", "data.bin")
-                elif isinstance(item, bytes):
-                    file_name = "data.bin"
-                    else:
-                    file_name = "data.txt"
+                file_name = self._get_file_name_for_upload(item)
                 
                 # Check if content is a file object (for streaming) or bytes
                 if isinstance(content_or_file, (BufferedReader, BinaryIO)) and hasattr(content_or_file, "read"):
@@ -673,27 +722,6 @@ class CogneeClient:
                     file_obj.close()
                 except Exception:
                     pass  # Ignore errors when closing
-
-        # Prepare form data
-        form_data: dict[str, Any] = {}
-        if dataset_name:
-            form_data["datasetName"] = dataset_name
-        if dataset_id:
-            form_data["datasetId"] = str(dataset_id)
-        if node_set:
-            form_data["node_set"] = json.dumps(node_set)
-
-        # Send request (don't set Content-Type for multipart/form-data)
-        response = await self._request(
-            "POST",
-            "/api/v1/add",
-            files=files,
-            data=form_data,
-            headers={},  # Let httpx set Content-Type for multipart
-        )
-
-        result_data = response.json()
-        return AddResult(**result_data)
 
     async def delete(
         self,
@@ -755,7 +783,7 @@ class CogneeClient:
             ...     run_in_background=False
             ... )
         """
-        if (not datasets or len(datasets) == 0) and (not dataset_ids or len(dataset_ids) == 0):
+        if (not datasets) and (not dataset_ids):
             raise ValidationError(
                 "Either datasets or dataset_ids must be provided",
                 400,
@@ -953,17 +981,7 @@ class CogneeClient:
         # Prepare file for upload using unified method
         field_name, content_or_file, mime_type = self._prepare_file_for_upload(data)
         # Determine file name for multipart upload
-        if isinstance(data, Path):
-            file_name = data.name
-        elif isinstance(data, str) and data.startswith(("/", "file://")):
-                file_path = Path(data.replace("file://", ""))
-            file_name = file_path.name if file_path.exists() else "data.txt"
-        elif hasattr(data, "name"):
-            file_name = getattr(data, "name", "data.bin")
-        elif isinstance(data, bytes):
-            file_name = "data.bin"
-        else:
-            file_name = "data.txt"
+        file_name = self._get_file_name_for_upload(data)
         
         # Check if content is a file object (for streaming) or bytes
         opened_file: BufferedReader | None = None
@@ -974,33 +992,33 @@ class CogneeClient:
                 # Track opened file (only for files we opened, not user-provided file objects)
                 if isinstance(content_or_file, BufferedReader):
                     opened_file = content_or_file
-        else:
+            else:
                 # Bytes content - normal upload
                 files = [(field_name, (file_name, content_or_file, mime_type))]
 
-        form_data: dict[str, Any] = {}
-        if node_set:
-            form_data["node_set"] = json.dumps(node_set)
+            form_data: dict[str, Any] = {}
+            if node_set:
+                form_data["node_set"] = json.dumps(node_set)
 
-        params = {
-            "data_id": str(data_id),
-            "dataset_id": str(dataset_id),
-        }
+            params = {
+                "data_id": str(data_id),
+                "dataset_id": str(dataset_id),
+            }
 
-        response = await self._request(
-            "PATCH",
-            "/api/v1/update",
-            files=files,
-            data=form_data,
-            params=params,
-            headers={},
-        )
+            response = await self._request(
+                "PATCH",
+                "/api/v1/update",
+                files=files,
+                data=form_data,
+                params=params,
+                headers={},
+            )
 
-        result_data = response.json()
-        # Handle dictionary of results (one per dataset)
-        if isinstance(result_data, dict):
-            return UpdateResult(**result_data)
-        return UpdateResult(status="success", message="Update completed", data_id=None)
+            result_data = response.json()
+            # Handle dictionary of results (one per dataset)
+            if isinstance(result_data, dict):
+                return UpdateResult(**result_data)
+            return UpdateResult(status="success", message="Update completed", data_id=None)
         finally:
             # Close file if we opened it for streaming
             if opened_file is not None:
@@ -1427,11 +1445,11 @@ class CogneeClient:
             async with semaphore:
                 try:
                     result = await self.add(
-                data=item,
-                dataset_name=dataset_name,
-                dataset_id=dataset_id,
-                node_set=node_set,
-            )
+                        data=item,
+                        dataset_name=dataset_name,
+                        dataset_id=dataset_id,
+                        node_set=node_set,
+                    )
                     return (0, result, None)  # (index_offset, result, error)
                 except Exception as e:
                     return (0, None, e)
