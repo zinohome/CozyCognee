@@ -6,10 +6,12 @@ Main client class for interacting with Cognee API server.
 
 import asyncio
 import json
+import logging
 import mimetypes
 from collections.abc import AsyncIterator
+from io import BufferedReader
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Callable, Literal, Union
 from uuid import UUID
 
 import httpx
@@ -79,6 +81,9 @@ class CogneeClient:
         timeout: float = 300.0,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        enable_logging: bool = False,
+        request_interceptor: Callable[[str, str, dict[str, Any]], None] | None = None,
+        response_interceptor: Callable[[httpx.Response], None] | None = None,
     ) -> None:
         """
         Initialize Cognee client.
@@ -89,12 +94,34 @@ class CogneeClient:
             timeout: Request timeout in seconds
             max_retries: Maximum number of retry attempts
             retry_delay: Initial retry delay in seconds
+            enable_logging: Enable request/response logging (default: False)
+            request_interceptor: Optional callback function called before each request.
+                               Receives (method, url, headers) as arguments
+            response_interceptor: Optional callback function called after each response.
+                                Receives httpx.Response as argument
         """
         self.api_url = api_url.rstrip("/")
         self.api_token = api_token
         self.timeout = timeout
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.enable_logging = enable_logging
+        self.request_interceptor = request_interceptor
+        self.response_interceptor = response_interceptor
+
+        # Setup logger if logging is enabled
+        if enable_logging:
+            self.logger = logging.getLogger("cognee_sdk")
+            if not self.logger.handlers:
+                handler = logging.StreamHandler()
+                formatter = logging.Formatter(
+                    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                )
+                handler.setFormatter(formatter)
+                self.logger.addHandler(handler)
+                self.logger.setLevel(logging.DEBUG)
+        else:
+            self.logger = None
 
         # Create HTTP client with connection pool
         self.client = httpx.AsyncClient(
@@ -148,6 +175,11 @@ class CogneeClient:
         except Exception:
             error_message = response.text or f"HTTP {response.status_code}"
 
+        # Add request information to error message for better debugging
+        request_info = f"Request: {response.request.method} {response.request.url}"
+        if error_message and request_info:
+            error_message = f"{error_message} ({request_info})"
+
         status_code = response.status_code
 
         if status_code == 401 or status_code == 403:
@@ -168,7 +200,13 @@ class CogneeClient:
         **kwargs: Any,
     ) -> httpx.Response:
         """
-        Send HTTP request with retry mechanism.
+        Send HTTP request with intelligent retry mechanism.
+
+        Implements smart retry logic:
+        - 4xx errors (except 429): No retry, immediately raise
+        - 429 errors (rate limit): Retry with exponential backoff
+        - 5xx errors: Retry with exponential backoff
+        - Network errors: Retry with exponential backoff
 
         Args:
             method: HTTP method (GET, POST, etc.)
@@ -198,6 +236,22 @@ class CogneeClient:
         # Merge headers, custom headers take precedence
         merged_headers = {**base_headers, **headers}
 
+        # Call request interceptor if provided
+        if self.request_interceptor:
+            try:
+                self.request_interceptor(method, url, merged_headers)
+            except Exception as e:
+                # Don't fail the request if interceptor fails
+                if self.logger:
+                    self.logger.warning(f"Request interceptor failed: {e}")
+
+        # Log request if logging is enabled
+        if self.logger:
+            self.logger.debug(f"Request: {method} {url}")
+
+        # Status codes that should not be retried (client errors)
+        NON_RETRYABLE_STATUS_CODES = {400, 401, 403, 404, 422}
+
         last_exception: Exception | None = None
         for attempt in range(self.max_retries):
             try:
@@ -208,8 +262,51 @@ class CogneeClient:
                     **kwargs,
                 )
 
-                # Handle error responses
+                # Log response if logging is enabled
+                if self.logger:
+                    self.logger.debug(
+                        f"Response: {method} {url} - {response.status_code} "
+                        f"(attempt {attempt + 1}/{self.max_retries})"
+                    )
+
+                # Call response interceptor if provided
+                if self.response_interceptor:
+                    try:
+                        self.response_interceptor(response)
+                    except Exception as e:
+                        # Don't fail the request if interceptor fails
+                        if self.logger:
+                            self.logger.warning(f"Response interceptor failed: {e}")
+
+                # Handle error responses with smart retry logic
                 if response.status_code >= 400:
+                    status_code = response.status_code
+                    
+                    # Client errors (4xx) - don't retry except for 429 (rate limit)
+                    if 400 <= status_code < 500:
+                        if status_code == 429:
+                            # Rate limit - retry with exponential backoff
+                            if attempt < self.max_retries - 1:
+                                await asyncio.sleep(self.retry_delay * (2**attempt))
+                                continue
+                            else:
+                                await self._handle_error_response(response)
+                        elif status_code in NON_RETRYABLE_STATUS_CODES:
+                            # Non-retryable client errors - immediately raise
+                            await self._handle_error_response(response)
+                        else:
+                            # Other 4xx errors - don't retry
+                            await self._handle_error_response(response)
+                    
+                    # Server errors (5xx) - retry with exponential backoff
+                    elif status_code >= 500:
+                        if attempt < self.max_retries - 1:
+                            await asyncio.sleep(self.retry_delay * (2**attempt))
+                            continue
+                        else:
+                            await self._handle_error_response(response)
+                    
+                    # Should not reach here, but handle just in case
                     await self._handle_error_response(response)
 
                 return response
@@ -221,7 +318,15 @@ class CogneeClient:
                 else:
                     raise TimeoutError(f"Request timeout after {self.max_retries} attempts") from e
 
+            except httpx.HTTPStatusError as e:
+                # HTTP status error - check if should retry
+                if e.response.status_code >= 500 and attempt < self.max_retries - 1:
+                    await asyncio.sleep(self.retry_delay * (2**attempt))
+                    continue
+                raise
+
             except httpx.RequestError as e:
+                # Network errors - retry with exponential backoff
                 last_exception = e
                 if attempt < self.max_retries - 1:
                     await asyncio.sleep(self.retry_delay * (2**attempt))
@@ -257,6 +362,205 @@ class CogneeClient:
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit."""
         await self.close()
+
+    # ==================== Helper Methods ====================
+
+    def _prepare_file_for_upload(
+        self,
+        data: str | bytes | Path | BinaryIO,
+        use_streaming: bool = True,
+    ) -> tuple[str, Union[bytes, BinaryIO], str]:
+        """
+        Prepare a single file for upload.
+
+        Handles different input types: strings, bytes, file paths, and file objects.
+        For large files, uses streaming upload to avoid loading entire file into memory.
+
+        Args:
+            data: Data to prepare. Can be:
+                - Text string
+                - Bytes data
+                - File path (Path object or string starting with "/", "file://", or "s3://")
+                - File object (BinaryIO)
+            use_streaming: If True, use streaming for large files (default: True)
+
+        Returns:
+            Tuple of (field_name, content_or_file_obj, mime_type) for multipart/form-data upload.
+            For small files or when use_streaming=False, content is bytes.
+            For large files when use_streaming=True, content is a file object for streaming.
+
+        Raises:
+            CogneeSDKError: If file cannot be read or processed
+        """
+        # Maximum recommended file size (50MB) - files larger than this will use streaming
+        MAX_RECOMMENDED_FILE_SIZE = 50 * 1024 * 1024
+        # Threshold for streaming upload (10MB) - files larger than this will stream
+        STREAMING_THRESHOLD = 10 * 1024 * 1024
+
+        if isinstance(data, str):
+            # Check if it's a file path
+            if data.startswith(("/", "file://", "s3://")):
+                file_path = Path(data.replace("file://", ""))
+                if file_path.exists() and file_path.is_file():
+                    # Check file size
+                    file_size = file_path.stat().st_size
+                    if file_size > MAX_RECOMMENDED_FILE_SIZE:
+                        import warnings
+                        warnings.warn(
+                            f"File size ({file_size / 1024 / 1024:.1f}MB) exceeds "
+                            f"recommended limit ({MAX_RECOMMENDED_FILE_SIZE / 1024 / 1024}MB). "
+                            "Large files may cause memory issues.",
+                            UserWarning,
+                            stacklevel=2
+                        )
+                    
+                    mime_type, _ = mimetypes.guess_type(str(file_path))
+                    
+                    # Use streaming for large files
+                    if use_streaming and file_size > STREAMING_THRESHOLD:
+                        try:
+                            # Return file object for streaming upload
+                            file_obj = open(file_path, "rb")
+                            return (
+                                "data",
+                                file_obj,  # File object for streaming
+                                mime_type or "application/octet-stream",
+                            )
+                        except OSError as e:
+                            raise CogneeSDKError(
+                                f"Failed to open file {file_path} for streaming: {str(e)}"
+                            ) from e
+                    else:
+                        # Read entire file for small files
+                        try:
+                            with open(file_path, "rb") as f:
+                                file_content = f.read()
+                            return (
+                                "data",
+                                file_content,
+                                mime_type or "application/octet-stream",
+                            )
+                        except OSError as e:
+                            raise CogneeSDKError(
+                                f"Failed to read file {file_path}: {str(e)}"
+                            ) from e
+                else:
+                    # Treat as text string if file doesn't exist
+                    return ("data", data.encode("utf-8"), "text/plain")
+            else:
+                # Plain text string
+                return ("data", data.encode("utf-8"), "text/plain")
+        
+        elif isinstance(data, bytes):
+            # Bytes data - always return as-is (already in memory)
+            return ("data", data, "application/octet-stream")
+        
+        elif isinstance(data, Path):
+            # Check file size
+            file_size = 0
+            if data.exists() and data.is_file():
+                file_size = data.stat().st_size
+                if file_size > MAX_RECOMMENDED_FILE_SIZE:
+                    import warnings
+                    warnings.warn(
+                        f"File size ({file_size / 1024 / 1024:.1f}MB) exceeds "
+                        f"recommended limit ({MAX_RECOMMENDED_FILE_SIZE / 1024 / 1024}MB). "
+                        "Large files may cause memory issues.",
+                        UserWarning,
+                        stacklevel=2
+                    )
+            
+            mime_type, _ = mimetypes.guess_type(str(data))
+            
+            # Use streaming for large files
+            if use_streaming and file_size > STREAMING_THRESHOLD:
+                try:
+                    # Return file object for streaming upload
+                    file_obj = open(data, "rb")
+                    return (
+                        "data",
+                        file_obj,  # File object for streaming
+                        mime_type or "application/octet-stream",
+                    )
+                except OSError as e:
+                    raise CogneeSDKError(f"Failed to open file {data} for streaming: {str(e)}") from e
+            else:
+                # Read entire file for small files
+                try:
+                    with open(data, "rb") as f:
+                        file_content = f.read()
+                    return (
+                        "data",
+                        file_content,
+                        mime_type or "application/octet-stream",
+                    )
+                except OSError as e:
+                    raise CogneeSDKError(f"Failed to read file {data}: {str(e)}") from e
+        
+        elif hasattr(data, "read"):
+            # File-like object (BinaryIO)
+            file_name = getattr(data, "name", "data.bin")
+            
+            # For file objects, check if we can determine size
+            file_size = 0
+            if hasattr(data, "seek") and hasattr(data, "tell"):
+                try:
+                    current_pos = data.tell()
+                    data.seek(0, 2)  # Seek to end
+                    file_size = data.tell()
+                    data.seek(current_pos)  # Restore position
+                except (OSError, AttributeError):
+                    pass
+            
+            # Save original position if supported
+            original_position = None
+            if hasattr(data, "tell"):
+                try:
+                    original_position = data.tell()
+                except (OSError, AttributeError):
+                    pass
+            
+            # Use streaming for large file objects if size is known and exceeds threshold
+            if use_streaming and file_size > STREAMING_THRESHOLD and hasattr(data, "seek"):
+                # Reset position to start for streaming
+                try:
+                    data.seek(0)
+                except (OSError, AttributeError):
+                    pass
+                
+                mime_type, _ = mimetypes.guess_type(file_name)
+                # Return file object as-is for streaming (httpx will handle it)
+                return (
+                    "data",
+                    data,  # File object for streaming
+                    mime_type or "application/octet-stream",
+                )
+            else:
+                # Read entire content for small files or when streaming is disabled
+                try:
+                    content = data.read() if hasattr(data, "read") else data
+                    
+                    # Restore position if supported and was saved
+                    if original_position is not None and hasattr(data, "seek"):
+                        try:
+                            data.seek(original_position)
+                        except (OSError, AttributeError):
+                            pass  # Ignore if seek fails
+                    
+                    mime_type, _ = mimetypes.guess_type(file_name)
+                    return (
+                        "data",
+                        content,
+                        mime_type or "application/octet-stream",
+                    )
+                except Exception as e:
+                    raise CogneeSDKError(
+                        f"Failed to read file object {file_name}: {str(e)}"
+                    ) from e
+        
+        else:
+            # Fallback: convert to string
+            return ("data", str(data).encode("utf-8"), "text/plain")
 
     # ==================== Core API Methods (P0) ====================
 
@@ -316,67 +620,55 @@ class CogneeClient:
         else:
             data_list = data
 
-        # Prepare files for multipart/form-data
+        # Prepare files for multipart/form-data using unified method
         files: list[tuple] = []
-        for item in data_list:
-            if isinstance(item, str):
-                # Check if it's a file path
-                if item.startswith(("/", "file://", "s3://")):
+        opened_files: list[BufferedReader] = []  # Track opened files for cleanup
+        
+        try:
+            for item in data_list:
+                field_name, content_or_file, mime_type = self._prepare_file_for_upload(item)
+                # Determine file name for multipart upload
+                if isinstance(item, Path):
+                    file_name = item.name
+                elif isinstance(item, str) and item.startswith(("/", "file://")):
                     file_path = Path(item.replace("file://", ""))
-                    if file_path.exists() and file_path.is_file():
-                        mime_type, _ = mimetypes.guess_type(str(file_path))
-                        try:
-                            with open(file_path, "rb") as f:
-                                file_content = f.read()
-                            files.append(
-                                (
-                                    "data",
-                                    (
-                                        file_path.name,
-                                        file_content,
-                                        mime_type or "application/octet-stream",
-                                    ),
-                                )
-                            )
-                        except OSError as e:
-                            raise CogneeSDKError(
-                                f"Failed to read file {file_path}: {str(e)}"
-                            ) from e
-                    else:
-                        # Treat as text string
-                        files.append(("data", ("data.txt", item.encode("utf-8"), "text/plain")))
+                    file_name = file_path.name if file_path.exists() else "data.txt"
+                elif hasattr(item, "name"):
+                    file_name = getattr(item, "name", "data.bin")
+                elif isinstance(item, bytes):
+                    file_name = "data.bin"
                 else:
-                    # Plain text string
-                    files.append(("data", ("data.txt", item.encode("utf-8"), "text/plain")))
-            elif isinstance(item, bytes):
-                files.append(("data", ("data.bin", item, "application/octet-stream")))
-            elif isinstance(item, Path):
-                mime_type, _ = mimetypes.guess_type(str(item))
+                    file_name = "data.txt"
+                
+                # Check if content is a file object (for streaming) or bytes
+                if isinstance(content_or_file, (BufferedReader, BinaryIO)) and hasattr(content_or_file, "read"):
+                    # File object for streaming - httpx will handle it
+                    files.append((field_name, (file_name, content_or_file, mime_type)))
+                    # Track opened files (only for files we opened, not user-provided file objects)
+                    if isinstance(content_or_file, BufferedReader):
+                        opened_files.append(content_or_file)
+                else:
+                    # Bytes content - normal upload
+                    files.append((field_name, (file_name, content_or_file, mime_type)))
+            
+            # Send request (don't set Content-Type for multipart/form-data)
+            response = await self._request(
+                "POST",
+                "/api/v1/add",
+                files=files,
+                data=form_data,
+                headers={},  # Let httpx set Content-Type for multipart
+            )
+            
+            result_data = response.json()
+            return AddResult(**result_data)
+        finally:
+            # Close any files we opened for streaming
+            for file_obj in opened_files:
                 try:
-                    with open(item, "rb") as f:
-                        file_content = f.read()
-                    files.append(
-                        (
-                            "data",
-                            (item.name, file_content, mime_type or "application/octet-stream"),
-                        )
-                    )
-                except OSError as e:
-                    raise CogneeSDKError(f"Failed to read file {item}: {str(e)}") from e
-            elif hasattr(item, "read"):
-                # File-like object
-                file_name = getattr(item, "name", "data.bin")
-                content = item.read() if hasattr(item, "read") else item
-                mime_type, _ = mimetypes.guess_type(file_name)
-                files.append(
-                    (
-                        "data",
-                        (file_name, content, mime_type or "application/octet-stream"),
-                    )
-                )
-            else:
-                # Fallback: convert to string
-                files.append(("data", ("data.txt", str(item).encode("utf-8"), "text/plain")))
+                    file_obj.close()
+                except Exception:
+                    pass  # Ignore errors when closing
 
         # Prepare form data
         form_data: dict[str, Any] = {}
@@ -503,7 +795,8 @@ class CogneeClient:
         top_k: int = 10,
         only_context: bool = False,
         use_combined_context: bool = False,
-    ) -> list[SearchResult] | CombinedSearchResult | list[dict[str, Any]]:
+        return_type: Literal["parsed", "raw"] = "parsed",
+    ) -> Union[list[SearchResult], CombinedSearchResult, list[dict[str, Any]]]:
         """
         Search the knowledge graph.
 
@@ -517,12 +810,13 @@ class CogneeClient:
             top_k: Maximum number of results to return
             only_context: Return only context without LLM completion
             use_combined_context: Use combined context for search
+            return_type: Type of return value - "parsed" (default) returns typed objects,
+                        "raw" returns raw dictionaries
 
         Returns:
-            Search results - type depends on search_type:
-            - List[SearchResult] for most search types
-            - CombinedSearchResult for combined searches
-            - List[Dict] for raw results
+            Search results - type depends on return_type and search_type:
+            - If return_type="parsed": List[SearchResult] or CombinedSearchResult
+            - If return_type="raw": List[dict[str, Any]]
 
         Raises:
             ValidationError: If query is empty
@@ -557,20 +851,34 @@ class CogneeClient:
         response = await self._request("POST", "/api/v1/search", json=payload)
         result_data = response.json()
 
-        # Handle different response types
+        # Handle raw return type
+        if return_type == "raw":
+            if isinstance(result_data, list):
+                return result_data
+            elif isinstance(result_data, dict):
+                return [result_data]
+            else:
+                return [result_data] if result_data else []
+
+        # Handle parsed return type (default)
         if isinstance(result_data, dict) and "result" in result_data:
-            return CombinedSearchResult(**result_data)
+            result: CombinedSearchResult = CombinedSearchResult(**result_data)
+            return result
         elif isinstance(result_data, list):
             # Try to parse as SearchResult objects
             try:
-                return [
+                parsed_results: list[SearchResult] = [
                     SearchResult(**item) if isinstance(item, dict) else item for item in result_data
                 ]
+                return parsed_results
             except Exception:
-                # Return raw data if parsing fails
-                return result_data
+                # Return raw data if parsing fails (fallback)
+                raw_results: list[dict[str, Any]] = result_data
+                return raw_results
         else:
-            return result_data
+            # Fallback to raw dict list
+            fallback_results: list[dict[str, Any]] = [result_data] if isinstance(result_data, dict) else result_data
+            return fallback_results
 
     async def list_datasets(self) -> list[Dataset]:
         """
@@ -638,75 +946,64 @@ class CogneeClient:
             NotFoundError: If data or dataset not found
             ValidationError: If invalid parameters provided
         """
-        # Prepare file for upload
-        files: list[tuple] = []
-        if isinstance(data, str):
-            if data.startswith(("/", "file://")):
-                file_path = Path(data.replace("file://", ""))
-                if file_path.exists() and file_path.is_file():
-                    mime_type, _ = mimetypes.guess_type(str(file_path))
-                    try:
-                        with open(file_path, "rb") as f:
-                            file_content = f.read()
-                        files.append(
-                            (
-                                "data",
-                                (
-                                    file_path.name,
-                                    file_content,
-                                    mime_type or "application/octet-stream",
-                                ),
-                            )
-                        )
-                    except OSError as e:
-                        raise CogneeSDKError(f"Failed to read file {file_path}: {str(e)}") from e
-                else:
-                    files.append(("data", ("data.txt", data.encode("utf-8"), "text/plain")))
-            else:
-                files.append(("data", ("data.txt", data.encode("utf-8"), "text/plain")))
-        elif isinstance(data, bytes):
-            files.append(("data", ("data.bin", data, "application/octet-stream")))
-        elif isinstance(data, Path):
-            mime_type, _ = mimetypes.guess_type(str(data))
-            try:
-                with open(data, "rb") as f:
-                    file_content = f.read()
-                files.append(
-                    ("data", (data.name, file_content, mime_type or "application/octet-stream"))
-                )
-            except OSError as e:
-                raise CogneeSDKError(f"Failed to read file {data}: {str(e)}") from e
-        elif hasattr(data, "read"):
+        # Prepare file for upload using unified method
+        field_name, content_or_file, mime_type = self._prepare_file_for_upload(data)
+        # Determine file name for multipart upload
+        if isinstance(data, Path):
+            file_name = data.name
+        elif isinstance(data, str) and data.startswith(("/", "file://")):
+            file_path = Path(data.replace("file://", ""))
+            file_name = file_path.name if file_path.exists() else "data.txt"
+        elif hasattr(data, "name"):
             file_name = getattr(data, "name", "data.bin")
-            content = data.read() if hasattr(data, "read") else data
-            mime_type, _ = mimetypes.guess_type(file_name)
-            files.append(("data", (file_name, content, mime_type or "application/octet-stream")))
+        elif isinstance(data, bytes):
+            file_name = "data.bin"
         else:
-            files.append(("data", ("data.txt", str(data).encode("utf-8"), "text/plain")))
+            file_name = "data.txt"
+        
+        # Check if content is a file object (for streaming) or bytes
+        opened_file: BufferedReader | None = None
+        try:
+            if isinstance(content_or_file, (BufferedReader, BinaryIO)) and hasattr(content_or_file, "read"):
+                # File object for streaming - httpx will handle it
+                files: list[tuple] = [(field_name, (file_name, content_or_file, mime_type))]
+                # Track opened file (only for files we opened, not user-provided file objects)
+                if isinstance(content_or_file, BufferedReader):
+                    opened_file = content_or_file
+            else:
+                # Bytes content - normal upload
+                files = [(field_name, (file_name, content_or_file, mime_type))]
 
-        form_data: dict[str, Any] = {}
-        if node_set:
-            form_data["node_set"] = json.dumps(node_set)
+            form_data: dict[str, Any] = {}
+            if node_set:
+                form_data["node_set"] = json.dumps(node_set)
 
-        params = {
-            "data_id": str(data_id),
-            "dataset_id": str(dataset_id),
-        }
+            params = {
+                "data_id": str(data_id),
+                "dataset_id": str(dataset_id),
+            }
 
-        response = await self._request(
-            "PATCH",
-            "/api/v1/update",
-            files=files,
-            data=form_data,
-            params=params,
-            headers={},
-        )
+            response = await self._request(
+                "PATCH",
+                "/api/v1/update",
+                files=files,
+                data=form_data,
+                params=params,
+                headers={},
+            )
 
-        result_data = response.json()
-        # Handle dictionary of results (one per dataset)
-        if isinstance(result_data, dict):
-            return UpdateResult(**result_data)
-        return UpdateResult(status="success", message="Update completed")
+            result_data = response.json()
+            # Handle dictionary of results (one per dataset)
+            if isinstance(result_data, dict):
+                return UpdateResult(**result_data)
+            return UpdateResult(status="success", message="Update completed", data_id=None)
+        finally:
+            # Close file if we opened it for streaming
+            if opened_file is not None:
+                try:
+                    opened_file.close()
+                except Exception:
+                    pass  # Ignore errors when closing
 
     async def delete_dataset(self, dataset_id: UUID) -> None:
         """
@@ -825,10 +1122,10 @@ class CogneeClient:
 
         # Extract token from response (format may vary)
         result_data = response.json()
-        token = result_data.get("access_token") or result_data.get("token")
+        token: str | None = result_data.get("access_token") or result_data.get("token")
         if token:
             self.api_token = token
-            return token
+            return str(token)  # Ensure return type is str
         raise AuthenticationError("Token not found in response", response.status_code)
 
     async def register(self, email: str, password: str) -> "User":
@@ -1069,32 +1366,47 @@ class CogneeClient:
         dataset_name: str | None = None,
         dataset_id: UUID | None = None,
         node_set: list[str] | None = None,
+        max_concurrent: int = 10,
     ) -> list[AddResult]:
         """
-        Add multiple data items in batch.
+        Add multiple data items in batch with concurrent control.
 
         Args:
             data_list: List of data items to add
             dataset_name: Name of the dataset
             dataset_id: UUID of the dataset
             node_set: Optional list of node identifiers
+            max_concurrent: Maximum number of concurrent operations (default: 10)
 
         Returns:
             List of AddResult objects
 
+        Raises:
+            ValidationError: If data_list is empty
+            ServerError: If any operation fails (first error encountered)
+
         Example:
             >>> results = await client.add_batch(
             ...     data_list=["text1", "text2", "text3"],
-            ...     dataset_name="my-dataset"
+            ...     dataset_name="my-dataset",
+            ...     max_concurrent=5
             ... )
         """
-        tasks = [
-            self.add(
-                data=item,
-                dataset_name=dataset_name,
-                dataset_id=dataset_id,
-                node_set=node_set,
-            )
-            for item in data_list
-        ]
+        if not data_list:
+            return []
+
+        # Use semaphore to control concurrent operations
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def add_with_semaphore(item: str | bytes | Path | BinaryIO) -> AddResult:
+            """Add a single item with semaphore control."""
+            async with semaphore:
+                return await self.add(
+                    data=item,
+                    dataset_name=dataset_name,
+                    dataset_id=dataset_id,
+                    node_set=node_set,
+                )
+
+        tasks = [add_with_semaphore(item) for item in data_list]
         return await asyncio.gather(*tasks)

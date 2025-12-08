@@ -89,7 +89,7 @@ class AddResult(BaseModel):
     
     model_config = ConfigDict(populate_by_name=True)
     
-    def __init__(self, **data):
+    def __init__(self, **data: Any) -> None:
         """Initialize AddResult, extracting data_id from data_ingestion_info if needed."""
         # Extract data_id from data_ingestion_info if present
         if "data_ingestion_info" in data and data["data_ingestion_info"]:
