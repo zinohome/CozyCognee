@@ -1483,15 +1483,18 @@ class CogneeClient:
                 return [r for r in results_list if r is not None]
         else:
             # Stop on first error (default behavior)
-            try:
-                task_results = await asyncio.gather(*tasks)
-                results = [result for _, result, _ in task_results if result is not None]
-                
-                if return_errors:
-                    errors = [err for _, _, err in task_results if err is not None]
-                    return results, errors
+            task_results = await asyncio.gather(*tasks)
+            
+            # Check for errors and raise the first one encountered
+            for _, result, error in task_results:
+                if error is not None:
+                    raise error
+            
+            # All succeeded, collect results
+            results = [result for _, result, _ in task_results if result is not None]
+            
+            if return_errors:
+                errors = [err for _, _, err in task_results if err is not None]
+                return results, errors
+            else:
                 return results
-            except Exception as e:
-                # If any task raised an exception, re-raise it
-                # This maintains backward compatibility
-                raise
