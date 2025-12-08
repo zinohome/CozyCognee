@@ -57,6 +57,7 @@ async def main():
             search_type=SearchType.GRAPH_COMPLETION,
             datasets=["example-dataset"],
             top_k=5,
+            return_type="parsed",  # Use "raw" for raw dictionary results
         )
 
         print(f"\nFound {len(search_results)} results:")

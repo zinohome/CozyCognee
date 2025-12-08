@@ -1,0 +1,32 @@
+# 1Panel Docker Compose 编排文件 - Cursor AI
+# 适用于1Panel面板的Docker Compose配置
+# 注意：使用外部网络 1panel-network，所有数据存储在 /data/cognee 目录
+
+services:
+  cursorai:
+    image: pzubuntu593/docker-cursor:latest
+    container_name: "Cursor AI"
+    privileged: true
+    security_opt:
+      - "seccomp:unconfined"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Asia/Shanghai"
+      TITLE: "Cursor AI"
+    volumes:
+      - /data/cognee/cursorai:/config
+      - /data/cognee/projects:/projects
+    devices:
+      - /dev/dri:/dev/dri
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - 1panel-network
+    labels:
+      createdBy: "Apps"
+
+networks:
+  1panel-network:
+    external: true

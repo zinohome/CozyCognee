@@ -9,12 +9,20 @@
 ```python
 client = CogneeClient(
     api_url="http://localhost:8000",
-    api_token="your-token",  # 可选
-    timeout=300.0,           # 请求超时（秒）
-    max_retries=3,           # 最大重试次数
-    retry_delay=1.0          # 初始重试延迟（秒）
+    api_token="your-token",           # 可选
+    timeout=300.0,                    # 请求超时（秒）
+    max_retries=3,                    # 最大重试次数
+    retry_delay=1.0,                  # 初始重试延迟（秒）
+    enable_logging=False,              # 启用请求/响应日志
+    request_interceptor=None,          # 请求拦截器（可选）
+    response_interceptor=None          # 响应拦截器（可选）
 )
 ```
+
+**新功能参数：**
+- `enable_logging`: 启用请求/响应日志记录
+- `request_interceptor`: 请求拦截器回调函数，接收 (method, url, headers)
+- `response_interceptor`: 响应拦截器回调函数，接收 httpx.Response
 
 ### 核心方法
 
@@ -37,6 +45,11 @@ result = await client.add(
 - 文件路径（Path 对象或字符串）
 - 文件对象（BinaryIO）
 - 上述类型的列表
+
+**流式上传：**
+- 文件大小 > 10MB 时自动使用流式上传，减少内存使用
+- 文件大小 > 50MB 时会发出警告，但仍可正常上传
+- 小文件（< 10MB）使用内存上传以获得更好性能
 
 #### delete()
 
@@ -77,9 +90,14 @@ results = await client.search(
     node_name=None,  # 可选
     top_k=10,
     only_context=False,
-    use_combined_context=False
+    use_combined_context=False,
+    return_type="parsed"  # 或 "raw"，默认为 "parsed"
 )
 ```
+
+**返回类型：**
+- `return_type="parsed"`（默认）：返回解析后的 `SearchResult` 或 `CombinedSearchResult` 对象
+- `return_type="raw"`：返回原始字典列表
 
 #### list_datasets()
 
@@ -173,7 +191,38 @@ user = await client.register("user@example.com", "password")
 
 #### add_batch()
 
-批量添加数据。
+批量添加数据，支持并发控制和错误处理。
+
+```python
+# 基本用法 - 遇到错误立即停止
+results = await client.add_batch(
+    data_list=["text1", "text2", "text3"],
+    dataset_name="my-dataset",
+    max_concurrent=10  # 最大并发数（默认：10）
+)
+
+# 继续执行并收集错误
+results, errors = await client.add_batch(
+    data_list=["text1", "text2", "text3"],
+    dataset_name="my-dataset",
+    max_concurrent=10,
+    continue_on_error=True,  # 遇到错误继续执行
+    return_errors=True        # 返回错误列表
+)
+```
+
+**参数：**
+- `data_list`: 要添加的数据项列表
+- `dataset_name`: 数据集名称
+- `dataset_id`: 数据集 ID（可选）
+- `node_set`: 节点集合（可选）
+- `max_concurrent`: 最大并发操作数（默认：10）
+- `continue_on_error`: 遇到错误是否继续执行（默认：False）
+- `return_errors`: 是否返回错误列表（默认：False）
+
+**返回值：**
+- 如果 `return_errors=False`：返回 `list[AddResult]`
+- 如果 `return_errors=True`：返回 `tuple[list[AddResult], list[Exception]]`
 
 ## 异常类型
 
@@ -184,6 +233,34 @@ user = await client.register("user@example.com", "password")
 - `ValidationError` - 请求验证错误（400）
 - `ServerError` - 服务器错误（5xx）
 - `TimeoutError` - 请求超时
+
+## 智能重试机制
+
+SDK 实现了智能重试逻辑：
+
+- **4xx 错误**（除 429 外）：不重试，立即抛出异常
+- **429 错误**（限流）：重试，使用指数退避
+- **5xx 错误**：重试，使用指数退避
+- **网络错误**：重试，使用指数退避
+
+这样可以减少无效重试，提高响应速度。
+
+## 流式上传
+
+对于大文件（> 10MB），SDK 自动使用流式上传：
+
+```python
+# 小文件（< 10MB）- 使用内存上传
+await client.add(data=Path("small_file.txt"), dataset_name="my-dataset")
+
+# 大文件（> 10MB）- 自动使用流式上传
+await client.add(data=Path("large_file.pdf"), dataset_name="my-dataset")
+```
+
+**优势：**
+- 减少内存使用（大文件场景下降低 50-90%）
+- 支持更大文件（理论上可支持任意大小文件）
+- 自动优化，无需手动配置
 
 ## 数据模型
 

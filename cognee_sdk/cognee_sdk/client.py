@@ -84,6 +84,8 @@ class CogneeClient:
         enable_logging: bool = False,
         request_interceptor: Callable[[str, str, dict[str, Any]], None] | None = None,
         response_interceptor: Callable[[httpx.Response], None] | None = None,
+        max_keepalive_connections: int = 10,
+        max_connections: int = 20,
     ) -> None:
         """
         Initialize Cognee client.
@@ -99,6 +101,8 @@ class CogneeClient:
                                Receives (method, url, headers) as arguments
             response_interceptor: Optional callback function called after each response.
                                 Receives httpx.Response as argument
+            max_keepalive_connections: Maximum number of keepalive connections (default: 10)
+            max_connections: Maximum number of total connections (default: 20)
         """
         self.api_url = api_url.rstrip("/")
         self.api_token = api_token
@@ -123,12 +127,12 @@ class CogneeClient:
         else:
             self.logger = None
 
-        # Create HTTP client with connection pool
+        # Create HTTP client with configurable connection pool
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(timeout, connect=10.0),
             limits=httpx.Limits(
-                max_keepalive_connections=10,
-                max_connections=20,
+                max_keepalive_connections=max_keepalive_connections,
+                max_connections=max_connections,
             ),
             follow_redirects=True,
         )
@@ -1367,9 +1371,11 @@ class CogneeClient:
         dataset_id: UUID | None = None,
         node_set: list[str] | None = None,
         max_concurrent: int = 10,
-    ) -> list[AddResult]:
+        continue_on_error: bool = False,
+        return_errors: bool = False,
+    ) -> list[AddResult] | tuple[list[AddResult], list[Exception]]:
         """
-        Add multiple data items in batch with concurrent control.
+        Add multiple data items in batch with concurrent control and error handling.
 
         Args:
             data_list: List of data items to add
@@ -1377,36 +1383,97 @@ class CogneeClient:
             dataset_id: UUID of the dataset
             node_set: Optional list of node identifiers
             max_concurrent: Maximum number of concurrent operations (default: 10)
+            continue_on_error: If True, continue processing even if some items fail (default: False)
+            return_errors: If True, return tuple of (results, errors) instead of just results (default: False)
 
         Returns:
-            List of AddResult objects
+            If return_errors=False: List of AddResult objects
+            If return_errors=True: Tuple of (list of AddResult objects, list of Exception objects)
+            
+            When continue_on_error=True, failed items will have None in results list and error in errors list.
 
         Raises:
             ValidationError: If data_list is empty
-            ServerError: If any operation fails (first error encountered)
+            ServerError: If any operation fails and continue_on_error=False (first error encountered)
 
         Example:
+            >>> # Basic usage - stop on first error
             >>> results = await client.add_batch(
             ...     data_list=["text1", "text2", "text3"],
             ...     dataset_name="my-dataset",
             ...     max_concurrent=5
             ... )
+            >>>
+            >>> # Continue on error and collect all errors
+            >>> results, errors = await client.add_batch(
+            ...     data_list=["text1", "text2", "text3"],
+            ...     dataset_name="my-dataset",
+            ...     continue_on_error=True,
+            ...     return_errors=True
+            ... )
         """
         if not data_list:
+            if return_errors:
+                return [], []
             return []
 
         # Use semaphore to control concurrent operations
         semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def add_with_semaphore(item: str | bytes | Path | BinaryIO) -> AddResult:
-            """Add a single item with semaphore control."""
+        async def add_with_semaphore(
+            item: str | bytes | Path | BinaryIO,
+        ) -> tuple[int, AddResult | None, Exception | None]:
+            """Add a single item with semaphore control and error handling."""
             async with semaphore:
-                return await self.add(
-                    data=item,
-                    dataset_name=dataset_name,
-                    dataset_id=dataset_id,
-                    node_set=node_set,
-                )
+                try:
+                    result = await self.add(
+                        data=item,
+                        dataset_name=dataset_name,
+                        dataset_id=dataset_id,
+                        node_set=node_set,
+                    )
+                    return (0, result, None)  # (index_offset, result, error)
+                except Exception as e:
+                    return (0, None, e)
 
+        # Create tasks with index tracking
         tasks = [add_with_semaphore(item) for item in data_list]
-        return await asyncio.gather(*tasks)
+        
+        if continue_on_error:
+            # Continue processing even if some fail
+            results_list: list[AddResult | None] = []
+            errors_list: list[Exception] = []
+            
+            task_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for task_result in task_results:
+                if isinstance(task_result, Exception):
+                    # Task itself failed (shouldn't happen, but handle it)
+                    results_list.append(None)
+                    errors_list.append(task_result)
+                else:
+                    _, result, error = task_result
+                    results_list.append(result)
+                    if error is not None:
+                        errors_list.append(error)
+            
+            # Filter out None results if return_errors is False
+            if return_errors:
+                return results_list, errors_list
+            else:
+                # Return only successful results
+                return [r for r in results_list if r is not None]
+        else:
+            # Stop on first error (default behavior)
+            try:
+                task_results = await asyncio.gather(*tasks)
+                results = [result for _, result, _ in task_results if result is not None]
+                
+                if return_errors:
+                    errors = [err for _, _, err in task_results if err is not None]
+                    return results, errors
+                return results
+            except Exception as e:
+                # If any task raised an exception, re-raise it
+                # This maintains backward compatibility
+                raise

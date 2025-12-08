@@ -72,6 +72,44 @@ async def main():
         )
         print(f"Uploaded with node_set: {result5.status}")
 
+        # Example 6: Streaming upload for large files
+        print("\nDemonstrating streaming upload for large files...")
+        print("Note: Files > 10MB automatically use streaming upload")
+        print("Files > 50MB will trigger warnings but still work")
+        
+        # Create a large file for demonstration (12MB - triggers streaming)
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".txt") as f:
+            large_data = b"Large file content " * (600 * 1024)  # ~12MB
+            f.write(large_data)
+            large_file = Path(f.name)
+
+        try:
+            result6 = await client.add(
+                data=large_file,
+                dataset_name="documents",
+            )
+            print(f"Large file uploaded (streaming): {result6.status}")
+        finally:
+            # Clean up
+            if large_file.exists():
+                large_file.unlink()
+
+        # Example 7: Batch upload with concurrent control
+        print("\nBatch upload with concurrent control...")
+        batch_results = await client.add_batch(
+            data_list=[
+                "Document 1",
+                "Document 2",
+                "Document 3",
+                "Document 4",
+                "Document 5",
+            ],
+            dataset_name="documents",
+            max_concurrent=3,  # Limit to 3 concurrent uploads
+        )
+        print(f"Batch uploaded {len(batch_results)} files with max_concurrent=3")
+
     except Exception as e:
         print(f"Error: {e}")
 
