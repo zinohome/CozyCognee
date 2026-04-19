@@ -8,8 +8,8 @@ WORKDIR /app
 # 构建上下文是项目根目录，所以路径是 project/cognee/cognee-frontend/...
 COPY project/cognee/cognee-frontend/package.json project/cognee/cognee-frontend/package-lock.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (npm install instead of npm ci: upstream lock file is out of sync with package.json)
+RUN npm install
 RUN npm rebuild lightningcss
 
 # Copy the rest of the application code to the working directory

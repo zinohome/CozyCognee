@@ -39,9 +39,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Note: pgvector is included in the postgres extra dependencies
 # No additional adapter installation needed for pgvector
 
-# Copy Alembic configuration
-COPY project/cognee/alembic.ini /app/alembic.ini
-COPY project/cognee/alembic/ /app/alembic
+# Copy Alembic configuration (upstream moved alembic into cognee/ subpackage)
+COPY project/cognee/cognee/alembic.ini /app/alembic.ini
+COPY project/cognee/cognee/alembic/ /app/alembic
 
 # Then, add the rest of the project source code and install it
 # Installing separately from its dependencies allows optimal layer caching
