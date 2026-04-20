@@ -15,21 +15,24 @@ RUN npm rebuild lightningcss
 # Copy the rest of the application code to the working directory
 COPY project/cognee/cognee-frontend/src ./src
 COPY project/cognee/cognee-frontend/public ./public
+
+# Fix upstream case-sensitivity issue: upstream commit #2606 intended to rename
+# PascalCase directories to lowercase for Linux compatibility, but the rename
+# wasn't reflected on disk (macOS git silently ignores case-only renames).
+# src/ui/app/index.ts imports from ./logo/ and ./loading/ (lowercase),
+# but the actual directories are Logo/ and Loading/ (PascalCase).
+RUN mv ./src/ui/app/Logo ./src/ui/app/logo && \
+    mv ./src/ui/app/Loading ./src/ui/app/loading
+
 # Apply CozyCognee patches: 使用补丁版本的 next.config.mjs 来禁用 devIndicators
+# 同时通过 env 块将 NEXT_PUBLIC_* 变量传递给运行时（Next.js dev 模式支持）
 COPY deployment/docker/cognee-frontend/patches/next.config.mjs ./next.config.mjs
-# Apply CozyCognee patches: 使用补丁版本的 InstanceDatasetsAccordion.tsx 来删除 cloud cognee 相关内容
-COPY deployment/docker/cognee-frontend/patches/InstanceDatasetsAccordion.tsx ./src/app/dashboard/InstanceDatasetsAccordion.tsx
-# Apply CozyCognee patches: 使用补丁版本的 Header.tsx 来删除 Sync 按钮、Premium 链接和 API keys 链接
-COPY deployment/docker/cognee-frontend/patches/Header.tsx ./src/ui/Layout/Header.tsx
-# Apply CozyCognee patches: 使用补丁版本的 Dashboard.tsx 来删除 "Select a plan" 按钮
-COPY deployment/docker/cognee-frontend/patches/Dashboard.tsx ./src/app/dashboard/Dashboard.tsx
-# Apply CozyCognee patches: 使用补丁版本的 Account.tsx 来删除 "Select a plan" 按钮
-COPY deployment/docker/cognee-frontend/patches/Account.tsx ./src/app/account/Account.tsx
+
 COPY project/cognee/cognee-frontend/postcss.config.mjs .
 COPY project/cognee/cognee-frontend/tsconfig.json .
 
 # Build arguments for environment variables (NEXT_PUBLIC_*)
-# 这些变量在运行时可用，Next.js 会在客户端使用它们
+# 这些变量在运行时可用，Next.js dev 模式会实时读取进程环境变量
 ARG NEXT_PUBLIC_BACKEND_API_URL=http://cognee:8000/api
 ARG NEXT_PUBLIC_CLOUD_API_URL=http://cognee-mcp:8000
 ARG NEXT_PUBLIC_MCP_API_URL=http://cognee-mcp:8000
@@ -42,19 +45,17 @@ ENV NEXT_PUBLIC_BACKEND_API_URL=${NEXT_PUBLIC_BACKEND_API_URL}
 ENV NEXT_PUBLIC_CLOUD_API_URL=${NEXT_PUBLIC_CLOUD_API_URL}
 ENV NEXT_PUBLIC_MCP_API_URL=${NEXT_PUBLIC_MCP_API_URL}
 ENV NEXT_PUBLIC_COGWIT_API_KEY=${NEXT_PUBLIC_COGWIT_API_KEY}
+# IS_CLOUD_ENVIRONMENT=false → isCloudEnvironment() 返回 false，隐藏所有 cloud cognee UI
 ENV NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT=${NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT}
 ENV NEXT_PUBLIC_DISABLE_CLOUD_CHECK=${NEXT_PUBLIC_DISABLE_CLOUD_CHECK}
 
 # Disable telemetry
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# CozyCognee: 禁用开发指示器（devIndicators）
-# 设置此环境变量为 true 来隐藏左下角的开发工具指示器
-# 默认禁用，如需启用可设置为 false 或不设置
+# 禁用左下角开发工具指示器（通过 next.config.mjs 中的 devIndicators 配置）
 ENV NEXT_DISABLE_DEV_INDICATORS=true
 
 EXPOSE 3000
 
 # Start the development server
 CMD ["npm", "run", "dev"]
-
