@@ -9,6 +9,7 @@ const nextConfig = {
     // 保留原有的 env 配置（如果需要）
     env: {
         NEXT_PUBLIC_BACKEND_API_URL: process.env.NEXT_PUBLIC_BACKEND_API_URL,
+        NEXT_PUBLIC_LOCAL_API_URL: process.env.NEXT_PUBLIC_LOCAL_API_URL,
         NEXT_PUBLIC_MCP_API_URL: process.env.NEXT_PUBLIC_MCP_API_URL,
         NEXT_PUBLIC_COGWIT_API_KEY: process.env.NEXT_PUBLIC_COGWIT_API_KEY,
         NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT: process.env.NEXT_PUBLIC_IS_CLOUD_ENVIRONMENT,
