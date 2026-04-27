@@ -34,10 +34,7 @@ COPY project/cognee/README.md project/cognee/pyproject.toml project/cognee/uv.lo
 # Install the project's dependencies using the lockfile and settings
 # 添加 scraping extra 以安装 protego 和 playwright（消除警告）
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --extra scraping --frozen --no-install-project --no-dev --no-editable
-
-# Note: pgvector is included in the postgres extra dependencies
-# No additional adapter installation needed for pgvector
+    uv sync --extra debug --extra api --extra postgres --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --extra scraping --frozen --no-install-project --no-dev --no-editable
 
 # Copy Alembic configuration (upstream moved alembic into cognee/ subpackage)
 COPY project/cognee/cognee/alembic.ini /app/alembic.ini
@@ -54,15 +51,13 @@ COPY deployment/docker/cognee/patch_cors.py /tmp/patch_cors.py
 RUN python3 /tmp/patch_cors.py /app/cognee/api/client.py && rm /tmp/patch_cors.py
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-uv sync --extra debug --extra api --extra postgres --extra neo4j --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --extra scraping --frozen --no-dev --no-editable
+uv sync --extra debug --extra api --extra postgres --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --extra scraping --frozen --no-dev --no-editable
 
 # Install playwright browsers (消除警告)
 # 注意：这会增加镜像大小（约 200MB），如果不需要 web scraping 功能可以注释掉
 # 在构建阶段安装，因为这里有完整的系统依赖
 # 安装到 /app/.cache 以便在最终阶段一起复制
 RUN PLAYWRIGHT_BROWSERS_PATH=/app/.cache/ms-playwright python3 -m playwright install --with-deps chromium 2>/dev/null || echo "Playwright browsers installation skipped (optional)"
-
-# Note: pgvector support is included via postgres extra dependencies
 
 FROM python:3.12-slim-bookworm
 
