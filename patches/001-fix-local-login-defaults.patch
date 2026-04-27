@@ -1,0 +1,13 @@
+--- a/cognee-frontend/src/app/(auth)/local-login/partials/LocalSignInForm.tsx
++++ b/cognee-frontend/src/app/(auth)/local-login/partials/LocalSignInForm.tsx
+@@ -5,8 +5,8 @@ import { Flex, Text, Title, TextInput, PasswordInput, Button } from "@mantine/co
+
+ const localApiUrl = process.env.NEXT_PUBLIC_LOCAL_API_URL || "http://localhost:8000";
+
+-const DEFAULT_EMAIL = "default_user@example.com";
+-const DEFAULT_PASSWORD = "default_password";
++const DEFAULT_EMAIL = "admin@cognee.com";
++const DEFAULT_PASSWORD = "passw0rd";
+
+ export default function LocalSignInForm() {
+   const [email, setEmail] = useState(DEFAULT_EMAIL);
