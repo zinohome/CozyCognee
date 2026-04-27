@@ -11,7 +11,7 @@ import sys
 def patch_get_graph_engine(filepath: str) -> bool:
     """Add falkor provider to the graph engine factory."""
     content = open(filepath).read()
-    if "falkor" in content:
+    if 'graph_database_provider == "falkor"' in content:
         print(f"  {filepath}: already patched, skipping")
         return True
 
@@ -47,7 +47,7 @@ def patch_get_graph_engine(filepath: str) -> bool:
 def patch_supported_handlers(filepath: str) -> bool:
     """Register FalkorDatasetDatabaseHandler."""
     content = open(filepath).read()
-    if "falkor" in content:
+    if "FalkorDatasetDatabaseHandler" in content:
         print(f"  {filepath}: already patched, skipping")
         return True
 
