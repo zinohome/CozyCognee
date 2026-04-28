@@ -61,6 +61,10 @@ COPY cognee-extensions/graph/falkor /app/cognee/infrastructure/databases/graph/f
 COPY deployment/docker/cognee/patch_falkor.py /tmp/patch_falkor.py
 RUN python3 /tmp/patch_falkor.py && rm /tmp/patch_falkor.py
 
+# Fix lru_cache poisoning in create_relational_engine
+COPY deployment/docker/cognee/patch_lru_cache.py /tmp/patch_lru_cache.py
+RUN python3 /tmp/patch_lru_cache.py && rm /tmp/patch_lru_cache.py
+
 # Install playwright browsers (消除警告)
 # 注意：这会增加镜像大小（约 200MB），如果不需要 web scraping 功能可以注释掉
 # 在构建阶段安装，因为这里有完整的系统依赖
