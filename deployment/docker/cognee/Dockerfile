@@ -113,8 +113,8 @@ RUN chmod +x /app/entrypoint.sh
 # Wait-for-PG script: prevents lru_cache poisoning from early PG connection failures
 COPY deployment/docker/cognee/wait_for_pg.py /app/wait_for_pg.py
 
-# Wrapper entrypoint: wait for PG → run original entrypoint
-RUN printf '#!/bin/bash\nset -e\nif [ -n "$DATABASE_URL" ]; then\n  echo "Waiting for PostgreSQL..."\n  python3 /app/wait_for_pg.py\nfi\nexec /app/entrypoint.sh\n' > /app/entrypoint_wrapper.sh && chmod +x /app/entrypoint_wrapper.sh
+# Wrapper entrypoint: wait for PG → sleep buffer → run original entrypoint
+RUN printf '#!/bin/bash\nset -e\nif [ -n "$DB_HOST" ]; then\n  echo "Waiting for PostgreSQL..."\n  python3 /app/wait_for_pg.py\n  echo "PG ready. Waiting 5s for connection pool stability..."\n  sleep 5\nfi\nexec /app/entrypoint.sh\n' > /app/entrypoint_wrapper.sh && chmod +x /app/entrypoint_wrapper.sh
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
