@@ -25,7 +25,7 @@ async def wait_for_pg():
         database=os.environ.get("DB_NAME", "cognee_db"),
     )
 
-    max_retries = 40
+    max_retries = 60
     delay = 3
     consecutive_ok = 0
     required_ok = 5
