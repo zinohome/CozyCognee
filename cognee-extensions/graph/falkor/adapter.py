@@ -351,8 +351,12 @@ class FalkorAdapter(GraphDBInterface):
         if not edges:
             return
         for edge in edges:
-            src, dst, rel, props = edge
-            await self.add_edge(src, dst, rel, props or {})
+            if len(edge) >= 4:
+                src, dst, rel, props = edge[0], edge[1], edge[2], edge[3]
+            else:
+                src, dst, rel = edge[0], edge[1], edge[2]
+                props = {}
+            await self.add_edge(str(src), str(dst), rel, props or {})
 
     # ------------------------------------------------------------------
     # 11. delete_graph
@@ -483,9 +487,14 @@ class FalkorAdapter(GraphDBInterface):
         if not edges:
             return []
         existing: List[EdgeData] = []
-        for src, dst, rel, props in edges:
-            if await self.has_edge(src, dst, rel):
-                existing.append((src, dst, rel, props))
+        for edge in edges:
+            if len(edge) >= 4:
+                src, dst, rel, props = edge[0], edge[1], edge[2], edge[3]
+            else:
+                src, dst, rel = edge[0], edge[1], edge[2]
+                props = {}
+            if await self.has_edge(str(src), str(dst), rel):
+                existing.append((str(src), str(dst), rel, props))
         return existing
 
     # ------------------------------------------------------------------
