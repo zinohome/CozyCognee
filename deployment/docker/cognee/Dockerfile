@@ -69,6 +69,10 @@ RUN python3 /tmp/patch_lru_cache.py && rm /tmp/patch_lru_cache.py
 COPY deployment/docker/cognee/patch_migration.py /tmp/patch_migration.py
 RUN python3 /tmp/patch_migration.py && rm /tmp/patch_migration.py
 
+# Fix alembic driver: asyncpg → psycopg2 (reliable scram-sha-256 via libpq)
+COPY deployment/docker/cognee/patch_alembic_driver.py /tmp/patch_alembic_driver.py
+RUN python3 /tmp/patch_alembic_driver.py && rm /tmp/patch_alembic_driver.py
+
 # Install playwright browsers (消除警告)
 # 注意：这会增加镜像大小（约 200MB），如果不需要 web scraping 功能可以注释掉
 # 在构建阶段安装，因为这里有完整的系统依赖
