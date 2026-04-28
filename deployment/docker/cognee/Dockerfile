@@ -65,6 +65,10 @@ RUN python3 /tmp/patch_falkor.py && rm /tmp/patch_falkor.py
 COPY deployment/docker/cognee/patch_lru_cache.py /tmp/patch_lru_cache.py
 RUN python3 /tmp/patch_lru_cache.py && rm /tmp/patch_lru_cache.py
 
+# Fix migration for missing pipelinerunstatus enum on fresh databases
+COPY deployment/docker/cognee/patch_migration.py /tmp/patch_migration.py
+RUN python3 /tmp/patch_migration.py && rm /tmp/patch_migration.py
+
 # Install playwright browsers (消除警告)
 # 注意：这会增加镜像大小（约 200MB），如果不需要 web scraping 功能可以注释掉
 # 在构建阶段安装，因为这里有完整的系统依赖
