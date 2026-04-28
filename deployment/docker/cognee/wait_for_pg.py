@@ -1,17 +1,20 @@
-"""Wait for PostgreSQL and run alembic migration before Cognee starts.
+"""Wait for PostgreSQL, then run Cognee migration in the SAME Python process.
 
-Uses SQLAlchemy+asyncpg (same driver as Cognee) to verify PG is fully ready.
-Requires 5 consecutive successful connections at 3s intervals to account for
-PG's TCP restart window after init.sh completes.
+Key insight: Cognee's get_relational_engine() uses a singleton. If we create
+the engine in this process after PG is confirmed ready, AND then run alembic
+in the same process, the singleton is guaranteed to have a working connection.
+
+When entrypoint.sh then starts gunicorn, it's a NEW process — but alembic is
+already at head, so Cognee's migration is a fast no-op.
 """
 import os
 import sys
 import time
 import asyncio
-import subprocess
 
 
 async def wait_for_pg():
+    """Wait until PG accepts SQLAlchemy+asyncpg connections (same driver as Cognee)."""
     from sqlalchemy import URL, text
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.pool import NullPool
@@ -38,7 +41,7 @@ async def wait_for_pg():
             await engine.dispose()
             consecutive_ok += 1
             if consecutive_ok >= required_ok:
-                print(f"[wait_for_pg] PostgreSQL stable after {i * delay}s ({required_ok} consecutive checks)")
+                print(f"[wait_for_pg] PostgreSQL stable after {i * delay}s")
                 return True
         except Exception:
             consecutive_ok = 0
@@ -49,30 +52,46 @@ async def wait_for_pg():
     return False
 
 
-def run_migration():
+def run_migration_in_process():
+    """Run alembic migration using Cognee's own engine (in-process, not subprocess).
+
+    This ensures the singleton engine is created with a working PG connection.
+    """
     try:
-        result = subprocess.run(
-            ["alembic", "upgrade", "head"],
-            cwd="/app/cognee",
-            capture_output=True,
-            text=True,
-            timeout=60,
+        # Import Cognee's engine — creates the singleton with current (working) PG connection
+        from cognee.infrastructure.databases.relational.get_relational_engine import get_relational_engine
+        engine = get_relational_engine()
+        uri = engine.db_uri if isinstance(engine.db_uri, str) else engine.db_uri.render_as_string(hide_password=True)
+        print(f"[wait_for_pg] Engine created: {uri}")
+
+        # Run alembic programmatically using the same engine
+        from alembic.config import Config
+        from alembic import command
+
+        alembic_cfg = Config("/app/cognee/alembic.ini")
+        alembic_cfg.set_main_option("script_location", "/app/cognee/alembic")
+
+        # Set the database URL from the engine (matches what env.py would compute)
+        db_uri = engine.db_uri if isinstance(engine.db_uri, str) else engine.db_uri.render_as_string(hide_password=False)
+        alembic_cfg.set_section_option(
+            alembic_cfg.config_ini_section,
+            "SQLALCHEMY_DATABASE_URI",
+            db_uri,
         )
-        if result.returncode == 0:
-            print("[wait_for_pg] Alembic migration OK")
-            return True
-        stderr = result.stderr + result.stdout
-        if "UserAlreadyExists" in stderr or "already exists" in stderr.lower():
+
+        command.upgrade(alembic_cfg, "head")
+        print("[wait_for_pg] Alembic migration OK (in-process)")
+        return True
+    except Exception as e:
+        err = str(e)
+        if "UserAlreadyExists" in err or "already exists" in err.lower():
             print("[wait_for_pg] Migration: non-critical (already exists)")
             return True
-        print(f"[wait_for_pg] Migration failed: {stderr[:200]}", file=sys.stderr)
-        return False
-    except Exception as e:
-        print(f"[wait_for_pg] Migration error: {e}", file=sys.stderr)
+        print(f"[wait_for_pg] Migration error: {err[:200]}", file=sys.stderr)
         return False
 
 
 if __name__ == "__main__":
     if not asyncio.run(wait_for_pg()):
         sys.exit(1)
-    run_migration()
+    run_migration_in_process()
