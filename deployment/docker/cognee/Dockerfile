@@ -50,16 +50,16 @@ COPY project/cognee/distributed /app/distributed
 COPY deployment/docker/cognee/patch_cors.py /tmp/patch_cors.py
 RUN python3 /tmp/patch_cors.py /app/cognee/api/client.py && rm /tmp/patch_cors.py
 
-# Install FalkorDB Python client
-RUN pip install falkordb>=1.6.0
+RUN --mount=type=cache,target=/root/.cache/uv \
+uv sync --extra debug --extra api --extra postgres --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --extra scraping --frozen --no-dev --no-editable
+
+# Install FalkorDB Python client (AFTER uv sync to avoid being overwritten)
+RUN /app/.venv/bin/pip install falkordb>=1.6.0
 
 # Copy FalkorDB adapter extension and register it
 COPY cognee-extensions/graph/falkor /app/cognee/infrastructure/databases/graph/falkor
 COPY deployment/docker/cognee/patch_falkor.py /tmp/patch_falkor.py
 RUN python3 /tmp/patch_falkor.py && rm /tmp/patch_falkor.py
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-uv sync --extra debug --extra api --extra postgres --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --extra scraping --frozen --no-dev --no-editable
 
 # Install playwright browsers (消除警告)
 # 注意：这会增加镜像大小（约 200MB），如果不需要 web scraping 功能可以注释掉
