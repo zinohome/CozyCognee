@@ -54,7 +54,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 uv sync --extra debug --extra api --extra postgres --extra llama-index --extra ollama --extra mistral --extra groq --extra anthropic --extra scraping --frozen --no-dev --no-editable
 
 # Install FalkorDB Python client (AFTER uv sync to avoid being overwritten)
-RUN /app/.venv/bin/pip install falkordb>=1.6.0
+RUN uv pip install falkordb>=1.6.0
 
 # Copy FalkorDB adapter extension and register it
 COPY cognee-extensions/graph/falkor /app/cognee/infrastructure/databases/graph/falkor
