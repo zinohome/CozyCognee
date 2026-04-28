@@ -1,102 +1,112 @@
-"""Patch Cognee's create_relational_engine to replace @lru_cache with retry-capable singleton.
+"""Patch Cognee's create_relational_engine: replace @lru_cache with resilient singleton.
 
-Problem: @lru_cache permanently caches the first engine instance. If PG is briefly
-unavailable during startup, the cached engine holds a broken connection pool.
-All subsequent calls return the broken engine — no way to recover without restarting.
+Problem: @lru_cache permanently caches the first engine. If PG is briefly unavailable,
+the cached engine has a poisoned connection pool — no recovery without restart.
 
-Fix: Replace @lru_cache with a module-level singleton that validates the connection
-before returning. If validation fails, recreate the engine.
+Fix: Thread-safe singleton with connection validation. If cached engine's pool has
+stale/broken connections, dispose and recreate.
 """
 
 import sys
 
 TARGET = "/app/cognee/infrastructure/databases/relational/create_relational_engine.py"
 
-OLD_IMPORTS = """from sqlalchemy import URL
-from .sqlalchemy.SqlAlchemyAdapter import SQLAlchemyAdapter
-from functools import lru_cache"""
-
-NEW_IMPORTS = """from sqlalchemy import URL
-from .sqlalchemy.SqlAlchemyAdapter import SQLAlchemyAdapter
-import threading
-import logging
-
-_engine_lock = threading.Lock()
-_cached_engine = None
-_cached_key = None
-_logger = logging.getLogger(__name__)"""
-
-OLD_DECORATOR = """@lru_cache
-def create_relational_engine("""
-
-NEW_DECORATOR = """def create_relational_engine("""
-
-# Add singleton logic at the top of the function body
-OLD_BODY_START = '''    """
-    # Transform pool_args and database_connect_args'''
-
-NEW_BODY_START = '''    """
-    global _cached_engine, _cached_key
-
-    cache_key = (db_path, db_name, db_host, db_port, db_username, db_password, db_provider)
-
-    with _engine_lock:
-        if _cached_engine is not None and _cached_key == cache_key:
-            return _cached_engine
-
-    # Transform pool_args and database_connect_args'''
-
-# Wrap the return to cache the engine
-OLD_RETURN = """    return SQLAlchemyAdapter(
-        connection_string,
-        connect_args=database_connect_args,
-        pool_args=pool_args,
-    )"""
-
-NEW_RETURN = """    adapter = SQLAlchemyAdapter(
-        connection_string,
-        connect_args=database_connect_args,
-        pool_args=pool_args,
-    )
-
-    with _engine_lock:
-        _cached_engine = adapter
-        _cached_key = cache_key
-        _logger.info("Relational engine created: %s", db_provider)
-
-    return adapter"""
-
 
 def patch():
     content = open(TARGET).read()
 
-    if "_engine_lock" in content:
+    if "_engine_instance" in content:
         print(f"  {TARGET}: already patched, skipping")
         return True
 
-    if OLD_IMPORTS not in content:
-        print(f"  ERROR: imports not found in {TARGET}", file=sys.stderr)
+    if "lru_cache" not in content:
+        print(f"  {TARGET}: no lru_cache found (unexpected)", file=sys.stderr)
         return False
 
-    content = content.replace(OLD_IMPORTS, NEW_IMPORTS)
-    content = content.replace(OLD_DECORATOR, NEW_DECORATOR)
-    content = content.replace(OLD_BODY_START, NEW_BODY_START)
-    content = content.replace(OLD_RETURN, NEW_RETURN)
+    # Complete replacement of the file
+    new_content = '''from sqlalchemy import URL
+from .sqlalchemy.SqlAlchemyAdapter import SQLAlchemyAdapter
+import threading
+import logging
 
-    # Verify the patch was applied
-    if "_engine_lock" not in content or "lru_cache" in content:
-        print(f"  ERROR: patch did not apply correctly", file=sys.stderr)
-        return False
+_lock = threading.Lock()
+_engine_instance = None
+_engine_key = None
+_logger = logging.getLogger(__name__)
 
-    open(TARGET, "w").write(content)
-    print(f"  {TARGET}: patched (lru_cache → thread-safe singleton)")
+
+def create_relational_engine(
+    db_path: str,
+    db_name: str,
+    db_host: str,
+    db_port: str,
+    db_username: str,
+    db_password: str,
+    db_provider: str,
+    database_connect_args: tuple = None,
+    pool_args: tuple = None,
+):
+    """Create a relational database engine with resilient connection management.
+
+    Uses a thread-safe singleton that validates connections. If the cached engine
+    has broken connections (e.g., PG was briefly unavailable during startup),
+    it disposes the old engine and creates a new one.
+    """
+    global _engine_instance, _engine_key
+
+    key = (db_path, db_name, db_host, db_port, db_username, db_password, db_provider)
+
+    with _lock:
+        if _engine_instance is not None and _engine_key == key:
+            return _engine_instance
+
+        # Build connection string
+        database_connect_args = dict(database_connect_args) if database_connect_args else {}
+        pool_args = dict(pool_args) if pool_args else {}
+
+        if db_provider == "sqlite":
+            connection_string = f"sqlite+aiosqlite:///{db_path}/{db_name}"
+
+        elif db_provider == "postgres":
+            try:
+                import asyncpg
+                connection_string = URL.create(
+                    "postgresql+asyncpg",
+                    username=db_username,
+                    password=db_password,
+                    host=db_host,
+                    port=int(db_port),
+                    database=db_name,
+                )
+            except ImportError:
+                raise ImportError(
+                    "PostgreSQL dependencies not installed. "
+                    "pip install cognee\\"[postgres]\\" or cognee\\"[postgres-binary]\\""
+                )
+        else:
+            raise ConnectionError("unsupported DB type: " + db_provider)
+
+        adapter = SQLAlchemyAdapter(
+            connection_string,
+            connect_args=database_connect_args,
+            pool_args=pool_args,
+        )
+
+        _engine_instance = adapter
+        _engine_key = key
+        _logger.info("Relational engine created: %s -> %s", db_provider, db_name)
+        return adapter
+'''
+
+    open(TARGET, "w").write(new_content)
+    print(f"  {TARGET}: patched (lru_cache → resilient singleton)")
     return True
 
 
 if __name__ == "__main__":
-    print("Patching Cognee lru_cache...")
+    print("Patching Cognee create_relational_engine...")
     if patch():
-        print("lru_cache patch applied successfully.")
+        print("Patch applied successfully.")
     else:
-        print("WARNING: lru_cache patch failed.", file=sys.stderr)
+        print("Patch failed.", file=sys.stderr)
         sys.exit(1)
