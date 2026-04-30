@@ -77,6 +77,10 @@ RUN python3 /tmp/patch_alembic_driver.py && rm /tmp/patch_alembic_driver.py
 COPY deployment/docker/cognee/patch_tiktoken.py /tmp/patch_tiktoken.py
 RUN python3 /tmp/patch_tiktoken.py && rm /tmp/patch_tiktoken.py
 
+# Fix LiteLLM UnsupportedParamsError for dimensions with openai/ prefix
+COPY deployment/docker/cognee/patch_litellm_drop_params.py /tmp/patch_litellm_drop_params.py
+RUN python3 /tmp/patch_litellm_drop_params.py && rm /tmp/patch_litellm_drop_params.py
+
 # Install playwright browsers (消除警告)
 # 注意：这会增加镜像大小（约 200MB），如果不需要 web scraping 功能可以注释掉
 # 在构建阶段安装，因为这里有完整的系统依赖
